@@ -1,0 +1,30 @@
+# Dependencies
+node_modules
+
+# Build outputs
+.output
+dist
+build
+
+# WXT generated
+.wxt
+
+# Logs
+*.log
+logs
+
+# Package manager
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# IDE
+.idea
+.vscode
+
+# OS
+.DS_Store
+
+# Stats
+stats.html
+stats-*.json

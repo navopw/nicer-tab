@@ -1,0 +1,56 @@
+{
+	"name": "nicer-tab",
+	"description": "A beautiful bookmark organizer for your new tab page",
+	"version": "0.1.0",
+	"author": "navopw",
+	"license": "GPL-3.0",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/navopw/nicer-tab.git"
+	},
+	"bugs": {
+		"url": "https://github.com/navopw/nicer-tab/issues"
+	},
+	"homepage": "https://github.com/navopw/nicer-tab#readme",
+	"type": "module",
+	"scripts": {
+		"dev": "wxt",
+		"dev:firefox": "wxt -b firefox",
+		"build": "wxt build",
+		"build:firefox": "wxt build -b firefox",
+		"zip": "wxt zip",
+		"zip:firefox": "wxt zip -b firefox",
+		"compile": "tsc --noEmit",
+		"postinstall": "wxt prepare",
+		"format": "prettier --write .",
+		"prepare": "husky"
+	},
+	"lint-staged": {
+		"*.{js,jsx,ts,tsx,json,css,md,html}": "prettier --write"
+	},
+	"dependencies": {
+		"@dnd-kit/helpers": "^0.2.3",
+		"@dnd-kit/react": "^0.2.3",
+		"lucide-react": "^0.563.0",
+		"react": "^19.2.3",
+		"react-colorful": "^5.6.1",
+		"react-dom": "^19.2.3",
+		"zustand": "^5.0.11"
+	},
+	"overrides": {
+		"uuid": "^11.1.1"
+	},
+	"devDependencies": {
+		"@tailwindcss/vite": "^4.1.18",
+		"@types/chrome": "^0.1.36",
+		"@types/react": "^19.2.7",
+		"@types/react-dom": "^19.2.3",
+		"@wxt-dev/module-react": "^1.1.5",
+		"husky": "^9.1.7",
+		"lint-staged": "^16.2.7",
+		"prettier": "^3.8.1",
+		"tailwindcss": "^4.1.18",
+		"typescript": "^5.9.3",
+		"wxt": "^0.20.6"
+	}
+}
