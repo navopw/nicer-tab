@@ -67,7 +67,9 @@ export async function importBookmarks(file: File, mode: "merge" | "replace" = "m
 		const importedRoot = data.bookmarks[0];
 		if (importedRoot?.children) {
 			for (const [index, folder] of importedRoot.children.entries()) {
-				const targetRootFolder = rootChildren.find(root => root.id === folder.id) ?? rootChildren[index];
+				const targetRootFolder =
+					rootChildren.find((root: chrome.bookmarks.BookmarkTreeNode) => root.id === folder.id) ??
+					rootChildren[index];
 				if (!targetRootFolder?.id) continue;
 
 				if (folder.children) {

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Feedback } from "@dnd-kit/dom";
 import { useDroppable } from "@dnd-kit/react";
 import { useSortable } from "@dnd-kit/react/sortable";
 import { ChevronRight, Folder, FolderOpen, FolderPlus, GripVertical, Pencil, Trash2 } from "lucide-react";
@@ -93,7 +94,7 @@ export function FolderItem({ folder, level, index, rootId }: FolderItemProps) {
 			chromeIndex: folder.index
 		},
 		disabled: isRootFolder,
-		feedback: "move",
+		plugins: defaults => [...defaults, Feedback.configure({ feedback: "move" })],
 		collisionPriority: 2,
 		accept: source => {
 			const sourceData = source.data as { type?: string; parentId?: string } | undefined;

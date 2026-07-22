@@ -29,13 +29,13 @@
 		"*.{js,jsx,ts,tsx,json,css,md,html}": "prettier --write"
 	},
 	"dependencies": {
-		"@dnd-kit/helpers": "^0.2.3",
-		"@dnd-kit/react": "^0.2.3",
+		"@dnd-kit/helpers": "^0.5.0",
+		"@dnd-kit/react": "^0.5.0",
 		"lucide-react": "^1.25.0",
-		"react": "^19.2.3",
-		"react-colorful": "^5.6.1",
-		"react-dom": "^19.2.3",
-		"zustand": "^5.0.11"
+		"react": "^19.2.8",
+		"react-colorful": "^5.8.0",
+		"react-dom": "^19.2.8",
+		"zustand": "^5.0.14"
 	},
 	"overrides": {
 		"uuid": "^11.1.1",
@@ -44,16 +44,16 @@
 		"shell-quote": "^1.8.5"
 	},
 	"devDependencies": {
-		"@tailwindcss/vite": "^4.1.18",
-		"@types/chrome": "^0.1.36",
-		"@types/react": "^19.2.7",
+		"@tailwindcss/vite": "^4.3.3",
+		"@types/chrome": "^0.2.2",
+		"@types/react": "^19.2.17",
 		"@types/react-dom": "^19.2.3",
-		"@wxt-dev/module-react": "^1.1.5",
+		"@wxt-dev/module-react": "^1.2.2",
 		"husky": "^9.1.7",
 		"lint-staged": "^17.1.0",
-		"prettier": "^3.8.1",
-		"tailwindcss": "^4.1.18",
-		"typescript": "^5.9.3",
-		"wxt": "^0.20.6"
+		"prettier": "^3.9.6",
+		"tailwindcss": "^4.3.3",
+		"typescript": "^7.0.2",
+		"wxt": "^0.20.27"
 	}
 }
