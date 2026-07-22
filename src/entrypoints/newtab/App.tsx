@@ -120,8 +120,7 @@ export default function App() {
 
 		if (sourceData.type === "bookmark") {
 			const bookmark = sourceData.bookmark as
-				| { id?: string; title?: string; parentId?: string; index?: number }
-				| undefined;
+				{ id?: string; title?: string; parentId?: string; index?: number } | undefined;
 			if (!bookmark?.id) return;
 			if (targetData.type === "folder-drop") {
 				const targetFolderId = String(targetData.folderId ?? "");
