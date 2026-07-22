@@ -31,7 +31,7 @@
 	"dependencies": {
 		"@dnd-kit/helpers": "^0.2.3",
 		"@dnd-kit/react": "^0.2.3",
-		"lucide-react": "^0.563.0",
+		"lucide-react": "^1.25.0",
 		"react": "^19.2.3",
 		"react-colorful": "^5.6.1",
 		"react-dom": "^19.2.3",
