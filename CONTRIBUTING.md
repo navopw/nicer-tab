@@ -64,7 +64,7 @@ When proposing a new feature, please:
     ```bash
     git commit -m "feat: add support for custom card border radius"
     ```
-7. **Push to your fork** and open a Pull Request against the `master` branch.
+7. **Push to your fork** and open a Pull Request against the `main` branch.
 8. Provide a clear description of your changes in the PR template.
 
 ## Development Setup
