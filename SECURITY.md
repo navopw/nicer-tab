@@ -13,7 +13,7 @@ We actively support and apply security patches to the following versions of Nice
 
 We take the security of Nicer Tab seriously. If you find a security vulnerability, please do not open a public issue. Instead, report it privately.
 
-Please report security vulnerabilities by emailing **navopw@users.noreply.github.com**.
+Please report security vulnerabilities by [opening a private security advisory on GitHub](https://github.com/navopw/nicer-tab/security/advisories/new).
 
 When reporting, please include:
 
