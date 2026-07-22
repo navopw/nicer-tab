@@ -1,16 +1,12 @@
-
 # Nicer Tab
 
 **Your bookmarks, beautifully organized.**
 
 Nicer Tab is a Chrome/Firefox new tab extension that turns your browser bookmarks into a fast, visual, card-based bookmark manager.
 
-
 <img width="600" alt="logo" src="https://github.com/user-attachments/assets/14e3d84f-c214-4621-956e-b25df54ca602" />
 
 <img width="1708" height="1289" alt="screencapture-chrome-newtab-2026-05-22-17_07_41 (1)" src="https://github.com/user-attachments/assets/e37bca8a-dfdf-4477-926d-252d80626d35" />
-
-
 
 [![GPL-3.0 License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)
