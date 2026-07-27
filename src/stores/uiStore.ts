@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
+import { chromeStorage } from "../lib/chrome-storage";
 import type { CardSize, ThemeMode } from "../types/bookmark";
 
 interface UIState {
@@ -22,21 +23,6 @@ export const SIDEBAR_MAX_WIDTH = 400;
 export const SIDEBAR_DEFAULT_WIDTH = 256;
 const STARTUP_THEME_KEY = "nicer-tab-startup-theme";
 const STARTUP_ACCENT_KEY = "nicer-tab-startup-accent";
-
-// Chrome storage adapter for Zustand
-const chromeStorage: StateStorage = {
-	getItem: async (name: string): Promise<string | null> => {
-		const result = await chrome.storage.local.get(name);
-		const value = result[name];
-		return typeof value === "string" ? value : null;
-	},
-	setItem: async (name: string, value: string): Promise<void> => {
-		await chrome.storage.local.set({ [name]: value });
-	},
-	removeItem: async (name: string): Promise<void> => {
-		await chrome.storage.local.remove(name);
-	}
-};
 
 function getStartupTheme(): ThemeMode {
 	if (typeof window === "undefined") return "system";
