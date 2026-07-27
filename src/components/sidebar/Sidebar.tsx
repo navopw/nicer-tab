@@ -1,14 +1,17 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { FolderPlus } from "lucide-react";
 import { useBookmarkStore } from "../../stores/bookmarkStore";
 import { useKeyboardStore } from "../../stores/keyboardStore";
 import { useUIStore, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH } from "../../stores/uiStore";
+import { flattenFolderTree } from "../../lib/folder-tree";
 import { FolderTree } from "./FolderTree";
 import { CreateBookmarkModal } from "../modals/CreateBookmarkModal";
 import { useSidebarKeyboard } from "../../hooks/useSidebarKeyboard";
+import { useFolderDnd } from "./useFolderDnd";
 
 export function Sidebar() {
 	const bookmarkTree = useBookmarkStore(state => state.bookmarkTree);
+	const collapsedFolders = useBookmarkStore(state => state.collapsedFolders);
 	const selectedFolderId = useBookmarkStore(state => state.selectedFolderId);
 	const createBookmark = useBookmarkStore(state => state.createBookmark);
 	const setFocusArea = useKeyboardStore(state => state.setFocusArea);
@@ -58,6 +61,13 @@ export function Sidebar() {
 	const rootFolders = bookmarkTree[0]?.children ?? [];
 	const rootId = bookmarkTree[0]?.id ?? null;
 
+	const rows = useMemo(
+		() => (rootId ? flattenFolderTree(rootFolders, collapsedFolders, rootId) : []),
+		[rootFolders, collapsedFolders, rootId]
+	);
+
+	useFolderDnd(rows);
+
 	const handleCreateFolder = async (parentId: string, title: string) => {
 		await createBookmark(parentId, title);
 	};
@@ -84,7 +94,7 @@ export function Sidebar() {
 
 			{/* Folder tree */}
 			<div className="flex-1 overflow-auto py-3" onClick={() => setFocusArea("sidebar")}>
-				<FolderTree folders={rootFolders} level={0} rootId={rootId} />
+				<FolderTree rows={rows} />
 			</div>
 
 			{/* Resize handle - centered on sidebar right edge */}

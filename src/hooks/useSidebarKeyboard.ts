@@ -1,27 +1,8 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { useBookmarkStore } from "../stores/bookmarkStore";
 import { useKeyboardStore } from "../stores/keyboardStore";
-import { isFolder, type BookmarkNode } from "../types/bookmark";
-
-// Flatten the folder tree into a navigable list
-function flattenFolders(
-	nodes: BookmarkNode[],
-	collapsedFolders: Set<string>,
-	result: BookmarkNode[] = []
-): BookmarkNode[] {
-	const orderedFolders = nodes
-		.filter(isFolder)
-		.slice()
-		.sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
-
-	for (const node of orderedFolders) {
-		result.push(node);
-		if (!collapsedFolders.has(node.id) && node.children) {
-			flattenFolders(node.children, collapsedFolders, result);
-		}
-	}
-	return result;
-}
+import { flattenFolderTree } from "../lib/folder-tree";
+import { isFolder } from "../types/bookmark";
 
 export function useSidebarKeyboard() {
 	const bookmarkTree = useBookmarkStore(state => state.bookmarkTree);
@@ -39,11 +20,12 @@ export function useSidebarKeyboard() {
 
 	// Get root folders
 	const rootFolders = useMemo(() => bookmarkTree[0]?.children ?? [], [bookmarkTree]);
+	const rootId = bookmarkTree[0]?.id ?? "root";
 
-	// Get flattened visible folders
+	// Get flattened visible folders, in the same order the sidebar renders them
 	const visibleFolders = useMemo(
-		() => flattenFolders(rootFolders, collapsedFolders),
-		[rootFolders, collapsedFolders]
+		() => flattenFolderTree(rootFolders, collapsedFolders, rootId).map(row => row.folder),
+		[rootFolders, collapsedFolders, rootId]
 	);
 
 	// Initialize focused folder if not set

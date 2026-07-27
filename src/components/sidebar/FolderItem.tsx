@@ -1,33 +1,35 @@
 import { useState } from "react";
-import { Feedback } from "@dnd-kit/dom";
-import { useDroppable } from "@dnd-kit/react";
-import { useSortable } from "@dnd-kit/react/sortable";
+import { pointerIntersection } from "@dnd-kit/collision";
+import { useDraggable, useDroppable } from "@dnd-kit/react";
 import { ChevronRight, Folder, FolderOpen, FolderPlus, GripVertical, Pencil, Trash2 } from "lucide-react";
 import { useBookmarkStore } from "../../stores/bookmarkStore";
+import { useFolderDragStore } from "../../stores/folderDragStore";
 import { useUIStore } from "../../stores/uiStore";
-import type { BookmarkNode } from "../../types/bookmark";
+import { FOLDER_BASE_PADDING, FOLDER_INDENT, type FlatFolder } from "../../lib/folder-tree";
 import { isFolder } from "../../types/bookmark";
-import { FolderTree } from "./FolderTree";
 import { ContextMenu, type ContextMenuItem } from "../common/ContextMenu";
 import { CreateSubfolderModal } from "../modals/CreateSubfolderModal";
 import { RenameFolderModal } from "../modals/RenameFolderModal";
 import { ConfirmDialog } from "../common/ConfirmDialog";
 
 interface FolderItemProps {
-	folder: BookmarkNode;
-	level: number;
-	index: number;
-	rootId: string | null;
+	row: FlatFolder;
 }
 
-export function FolderItem({ folder, level, index, rootId }: FolderItemProps) {
+/** Horizontal offset of the drop indicator, aligned with the folder icon at that depth. */
+function indicatorInset(depth: number): number {
+	return 8 + FOLDER_BASE_PADDING + depth * FOLDER_INDENT;
+}
+
+export function FolderItem({ row }: FolderItemProps) {
+	const { folder, depth, parentId, hasChildFolders, isExpanded } = row;
+
 	const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 	const [showCreateModal, setShowCreateModal] = useState(false);
 	const [showRenameModal, setShowRenameModal] = useState(false);
 	const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 	const [isDeleting, setIsDeleting] = useState(false);
 	const selectedFolderId = useBookmarkStore(state => state.selectedFolderId);
-	const collapsedFolders = useBookmarkStore(state => state.collapsedFolders);
 	const setSelectedFolderId = useBookmarkStore(state => state.setSelectedFolderId);
 	const toggleFolderExpanded = useBookmarkStore(state => state.toggleFolderExpanded);
 	const setFolderExpanded = useBookmarkStore(state => state.setFolderExpanded);
@@ -36,9 +38,43 @@ export function FolderItem({ folder, level, index, rootId }: FolderItemProps) {
 	const deleteBookmark = useBookmarkStore(state => state.deleteBookmark);
 	const showFolderBookmarkCount = useUIStore(state => state.showFolderBookmarkCount);
 
+	// Subscribe to primitives so a pointer move only re-renders the rows it touches.
+	const dropMode = useFolderDragStore(state => (state.drop?.rowId === folder.id ? state.drop.mode : null));
+	const dropDepth = useFolderDragStore(state => (state.drop?.rowId === folder.id ? state.drop.depth : 0));
+	const isTravelling = useFolderDragStore(state => state.draggedSubtreeIds.has(folder.id));
+
 	const isSelected = selectedFolderId === folder.id;
-	const isExpanded = !collapsedFolders.has(folder.id);
-	const hasChildren = folder.children?.some(isFolder) ?? false;
+	// The permanent Chrome folders (Bookmarks Bar, Other Bookmarks, ...) cannot be moved.
+	const isRootFolder = depth === 0;
+
+	const draggable = useDraggable({
+		id: folder.id,
+		data: { type: "folder", folderId: folder.id, parentId },
+		disabled: isRootFolder
+	});
+
+	const droppable = useDroppable({
+		id: `folder-drop:${folder.id}`,
+		data: { type: "folder-drop", folderId: folder.id },
+		collisionDetector: pointerIntersection,
+		// Outrank the grid's sortable cards so dragging a bookmark over the sidebar wins.
+		collisionPriority: 3,
+		// Folders accept themselves too: hovering your own row is how you change
+		// nesting depth without moving up or down the tree.
+		accept: source => {
+			const sourceData = source.data as { type?: string } | undefined;
+			return sourceData?.type === "folder" || sourceData?.type === "bookmark";
+		}
+	});
+
+	const setNodeRef = (element: HTMLLIElement | null) => {
+		draggable.ref(element);
+		droppable.ref(element);
+	};
+
+	// The lifted row floats under the cursor; its descendants stay behind in the list.
+	const isLifted = draggable.isDragging;
+	const isLeftBehind = isTravelling && !isLifted;
 
 	const handleClick = () => {
 		setSelectedFolderId(folder.id);
@@ -79,51 +115,6 @@ export function FolderItem({ folder, level, index, rootId }: FolderItemProps) {
 		}
 	};
 
-	// Root folders are direct children of the bookmarks tree root.
-	const isRootFolder = !!rootId && folder.parentId === rootId;
-	const parentId = folder.parentId ?? rootId ?? "root";
-
-	const sortable = useSortable({
-		id: folder.id,
-		index,
-		group: parentId,
-		data: {
-			type: "folder",
-			folderId: folder.id,
-			parentId,
-			chromeIndex: folder.index
-		},
-		disabled: isRootFolder,
-		plugins: defaults => [...defaults, Feedback.configure({ feedback: "move" })],
-		collisionPriority: 2,
-		accept: source => {
-			const sourceData = source.data as { type?: string; parentId?: string } | undefined;
-			return sourceData?.type === "folder" && sourceData.parentId === parentId;
-		}
-	});
-
-	const dropInto = useDroppable({
-		id: `folder-drop:${folder.id}`,
-		data: {
-			type: "folder-drop",
-			folderId: folder.id
-		},
-		collisionPriority: 3,
-		accept: source => {
-			const sourceData = source.data as { type?: string; folderId?: string } | undefined;
-			if (sourceData?.type === "folder") {
-				return sourceData.folderId !== folder.id;
-			}
-			return sourceData?.type === "bookmark";
-		}
-	});
-
-	const setNodeRef = (element: HTMLDivElement | null) => {
-		sortable.ref(element);
-	};
-
-	const isDropTarget = dropInto.isDropTarget;
-
 	const contextMenuItems: ContextMenuItem[] = [
 		{
 			id: "create-subfolder",
@@ -153,20 +144,31 @@ export function FolderItem({ folder, level, index, rootId }: FolderItemProps) {
 	// Count bookmarks (not folders) in this folder
 	const bookmarkCount = folder.children?.filter(c => !isFolder(c)).length ?? 0;
 
+	const dropLine = (edge: "top" | "bottom") => (
+		<span
+			className={`absolute ${edge === "top" ? "top-0" : "bottom-0"} right-2 h-0.5 rounded-full bg-[var(--accent-color)] pointer-events-none z-10`}
+			style={{ left: indicatorInset(dropDepth) }}
+		>
+			<span className="absolute -left-1 -top-[3px] w-2 h-2 rounded-full bg-[var(--accent-color)]" />
+		</span>
+	);
+
 	return (
-		<li>
+		<li ref={setNodeRef} className="relative py-0.5 group/folder">
+			{dropMode === "before" && dropLine("top")}
+
 			<div
-				ref={setNodeRef}
 				className={`
 							flex items-center gap-2 px-3 py-2 mx-2 rounded-lg cursor-pointer
-							transition-all duration-150
+							transition-colors duration-150
 							${isSelected ? "bg-[var(--accent-color)] text-white shadow-sm" : "hover:bg-[var(--sidebar-hover)] text-primary"}
-							${isDropTarget ? "ring-2 ring-[var(--accent-color)] ring-offset-1 ring-offset-[var(--bg-primary)]" : ""}
+							${dropMode === "inside" ? "ring-2 ring-[var(--accent-color)] ring-offset-1 ring-offset-[var(--bg-primary)]" : ""}
+							${isLifted ? "bg-[var(--bg-secondary)] shadow-md ring-1 ring-[var(--border-color)]" : ""}
 						`}
 				style={{
-					paddingLeft: `${level * 12 + 12}px`,
-					opacity: sortable.isDragging ? 0.4 : 1,
-					transition: sortable.isDragging ? "none" : "transform 150ms ease, opacity 150ms ease"
+					paddingLeft: `${depth * FOLDER_INDENT + FOLDER_BASE_PADDING}px`,
+					// Keep the lifted row see-through so the drop indicator under it stays readable.
+					opacity: isLifted ? 0.75 : isLeftBehind ? 0.4 : 1
 				}}
 				onClick={handleClick}
 				onContextMenu={handleContextMenu}
@@ -177,7 +179,7 @@ export function FolderItem({ folder, level, index, rootId }: FolderItemProps) {
 					className={`
             w-4 h-4 flex items-center justify-center rounded cursor-pointer
             transition-transform duration-150
-            ${hasChildren ? "visible" : "invisible"}
+            ${hasChildFolders ? "visible" : "invisible"}
             ${isExpanded ? "rotate-90" : "rotate-0"}
           `}
 				>
@@ -185,7 +187,7 @@ export function FolderItem({ folder, level, index, rootId }: FolderItemProps) {
 				</button>
 
 				{/* Folder icon */}
-				<span ref={dropInto.ref} className="flex items-center">
+				<span className="flex items-center">
 					{isExpanded ? (
 						<FolderOpen className="w-4 h-4 flex-shrink-0" />
 					) : (
@@ -208,23 +210,13 @@ export function FolderItem({ folder, level, index, rootId }: FolderItemProps) {
 					</span>
 				)}
 
-				{/* Drag handle */}
+				{/* Drag affordance - the whole row is draggable */}
 				{!isRootFolder && (
-					<span
-						ref={sortable.handleRef}
-						className="text-tertiary hover:text-primary cursor-grab active:cursor-grabbing"
-						onClick={e => e.stopPropagation()}
-						onPointerDown={e => e.stopPropagation()}
-					>
-						<GripVertical className="w-4 h-4" />
-					</span>
+					<GripVertical className="w-4 h-4 flex-shrink-0 opacity-0 group-hover/folder:opacity-60 cursor-grab active:cursor-grabbing" />
 				)}
 			</div>
 
-			{/* Nested folders */}
-			{isExpanded && folder.children && (
-				<FolderTree folders={folder.children} level={level + 1} rootId={rootId} />
-			)}
+			{dropMode === "after" && dropLine("bottom")}
 
 			{/* Context menu */}
 			{contextMenu && (

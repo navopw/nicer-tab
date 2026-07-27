@@ -1,28 +1,23 @@
-import type { BookmarkNode } from "../../types/bookmark";
-import { isFolder } from "../../types/bookmark";
+import type { FlatFolder } from "../../lib/folder-tree";
 import { FolderItem } from "./FolderItem";
 
 interface FolderTreeProps {
-	folders: BookmarkNode[];
-	level: number;
-	rootId: string | null;
+	rows: FlatFolder[];
 }
 
-export function FolderTree({ folders, level, rootId }: FolderTreeProps) {
-	// Filter to only show folders (not bookmarks)
-	const folderNodes = folders
-		.filter(isFolder)
-		.slice()
-		.sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
-
-	if (folderNodes.length === 0) {
+/**
+ * The folder tree is rendered as a flat list so that drag and drop can treat every
+ * visible folder as a single, contiguous drop lane regardless of nesting depth.
+ */
+export function FolderTree({ rows }: FolderTreeProps) {
+	if (rows.length === 0) {
 		return null;
 	}
 
 	return (
-		<ul className="space-y-1">
-			{folderNodes.map((folder, index) => (
-				<FolderItem key={folder.id} folder={folder} level={level} index={index} rootId={rootId} />
+		<ul>
+			{rows.map(row => (
+				<FolderItem key={row.folder.id} row={row} />
 			))}
 		</ul>
 	);

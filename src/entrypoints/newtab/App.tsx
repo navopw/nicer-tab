@@ -15,31 +15,17 @@ export default function App() {
 	const fetchBookmarks = useBookmarkStore(state => state.fetchBookmarks);
 	const isLoading = useBookmarkStore(state => state.isLoading);
 	const error = useBookmarkStore(state => state.error);
-	const bookmarkTree = useBookmarkStore(state => state.bookmarkTree);
 	const selectedFolderId = useBookmarkStore(state => state.selectedFolderId);
 	const moveBookmark = useBookmarkStore(state => state.moveBookmark);
-	const getBookmarksInFolder = useBookmarkStore(state => state.getBookmarksInFolder);
 	const getFolderPath = useBookmarkStore(state => state.getFolderPath);
 
-	const [pendingFolderMove, setPendingFolderMove] = useState<{ sourceId: string; targetId: string } | null>(null);
 	const [pendingBookmarkMove, setPendingBookmarkMove] = useState<{
 		bookmarkId: string;
 		bookmarkTitle: string;
 		sourceParentId: string | null;
 		targetId: string;
 	} | null>(null);
-	const [isConfirmingFolderMove, setIsConfirmingFolderMove] = useState(false);
 	const [isConfirmingBookmarkMove, setIsConfirmingBookmarkMove] = useState(false);
-
-	const rootId = bookmarkTree[0]?.id ?? null;
-	const folderMoveNames = useMemo(() => {
-		if (!pendingFolderMove) return null;
-		const sourcePath = getFolderPath(pendingFolderMove.sourceId);
-		const targetPath = getFolderPath(pendingFolderMove.targetId);
-		const sourceName = sourcePath[sourcePath.length - 1]?.title || "Untitled";
-		const targetName = targetPath[targetPath.length - 1]?.title || "Untitled";
-		return { sourceName, targetName };
-	}, [pendingFolderMove, getFolderPath]);
 
 	const bookmarkMoveNames = useMemo(() => {
 		if (!pendingBookmarkMove) return null;
@@ -69,6 +55,7 @@ export default function App() {
 		return setupBookmarkListeners();
 	}, [fetchBookmarks]);
 
+	// Folder drags are owned by the sidebar (see useFolderDnd) - this only covers the grid.
 	const handleDragEnd = async (event: any) => {
 		const { operation, canceled } = event;
 		if (canceled) return;
@@ -76,47 +63,9 @@ export default function App() {
 		const target = operation?.target;
 		if (!source || !target) return;
 
-		const sourceId = String(source.id);
-		const sourceData = source.data as
-			| { type?: string; folderId?: string; parentId?: string; chromeIndex?: number; bookmark?: unknown }
-			| undefined;
-		const targetData = target.data as
-			| { type?: string; folderId?: string; parentId?: string; chromeIndex?: number; bookmark?: unknown }
-			| undefined;
+		const sourceData = source.data as { type?: string; bookmark?: unknown } | undefined;
+		const targetData = target.data as { type?: string; folderId?: string; bookmark?: unknown } | undefined;
 		if (!sourceData || !targetData) return;
-
-		if (sourceData.type === "folder") {
-			const isRootFolder = !!rootId && sourceData.parentId === rootId;
-			if (isRootFolder) return;
-			if (targetData.type === "folder-drop") {
-				const targetFolderId = String(targetData.folderId ?? "");
-				if (!targetFolderId || targetFolderId === sourceId) return;
-				const path = getFolderPath(targetFolderId);
-				if (path.some(node => node.id === sourceId)) return;
-				setPendingFolderMove({ sourceId, targetId: targetFolderId });
-				return;
-			}
-
-			if (targetData.type !== "folder") return;
-			if (sourceId === String(target.id)) return;
-
-			const sourceParentId = sourceData.parentId ?? rootId;
-			const targetParentId = targetData.parentId ?? rootId;
-			if (!sourceParentId || !targetParentId || sourceParentId !== targetParentId) return;
-
-			// Use Chrome indices from the folder data
-			const sourceChromeIndex = sourceData.chromeIndex as number | undefined;
-			const targetChromeIndex = targetData.chromeIndex as number | undefined;
-			if (sourceChromeIndex === undefined || targetChromeIndex === undefined) return;
-			if (sourceChromeIndex === targetChromeIndex) return;
-
-			// Chrome inserts BEFORE removing, so when moving forward we need +1
-			// When moving backward, use the target index directly
-			const finalIndex = sourceChromeIndex < targetChromeIndex ? targetChromeIndex + 1 : targetChromeIndex;
-
-			await moveBookmark(sourceId, { parentId: sourceParentId, index: finalIndex });
-			return;
-		}
 
 		if (sourceData.type === "bookmark") {
 			const bookmark = sourceData.bookmark as
@@ -151,17 +100,6 @@ export default function App() {
 			const finalIndex = sourceChromeIndex < targetChromeIndex ? targetChromeIndex + 1 : targetChromeIndex;
 
 			await moveBookmark(bookmark.id, { parentId: sourceParentId, index: finalIndex });
-		}
-	};
-
-	const handleConfirmFolderMove = async () => {
-		if (!pendingFolderMove) return;
-		setIsConfirmingFolderMove(true);
-		try {
-			await moveBookmark(pendingFolderMove.sourceId, { parentId: pendingFolderMove.targetId });
-			setPendingFolderMove(null);
-		} finally {
-			setIsConfirmingFolderMove(false);
 		}
 	};
 
@@ -231,16 +169,6 @@ export default function App() {
 					</div>
 				</main>
 			</div>
-
-			<ConfirmDialog
-				isOpen={!!pendingFolderMove}
-				onClose={() => setPendingFolderMove(null)}
-				onConfirm={handleConfirmFolderMove}
-				title="Move folder"
-				message={`Move "${folderMoveNames?.sourceName ?? "Untitled"}" into "${folderMoveNames?.targetName ?? "Untitled"}"?`}
-				confirmLabel="Move"
-				isLoading={isConfirmingFolderMove}
-			/>
 
 			<ConfirmDialog
 				isOpen={!!pendingBookmarkMove}

@@ -18,7 +18,7 @@ Nicer Tab is a Chrome/Firefox new tab extension that turns your browser bookmark
 - **Visual bookmark grid** - Card-based bookmarks with favicons, fallback initials, and small/medium/large card sizes.
 - **Folder navigation** - Collapsible, keyboard-navigable folder tree with optional bookmark counts and a resizable sidebar.
 - **Bookmark management** - Create, edit, delete, duplicate, open, copy URLs, and create folders.
-- **Drag and drop** - Reorder bookmarks and folders, or move items into folders with confirmation for cross-folder moves.
+- **Drag and drop** - Reorder bookmarks in the grid, and rearrange the sidebar tree: drop a folder between rows to reorder it, onto a row to nest it inside, or drag sideways to change its nesting depth. Collapsed folders spring open while you hover them.
 - **Search** - Real-time search across all bookmarks, grouped by folder path.
 - **Appearance controls** - System/light/dark theme support plus preset or custom accent colors.
 - **Custom favicon URLs** - Override a bookmark's icon with a direct image URL, cached in extension storage.

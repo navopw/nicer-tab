@@ -29,6 +29,7 @@
 		"*.{js,jsx,ts,tsx,json,css,md,html}": "prettier --write"
 	},
 	"dependencies": {
+		"@dnd-kit/collision": "^0.5.0",
 		"@dnd-kit/helpers": "^0.5.0",
 		"@dnd-kit/react": "^0.5.0",
 		"lucide-react": "^1.25.0",
