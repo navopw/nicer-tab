@@ -9,6 +9,8 @@ import { CreateBookmarkModal } from "../modals/CreateBookmarkModal";
 import { useSidebarKeyboard } from "../../hooks/useSidebarKeyboard";
 import { useFolderDnd } from "./useFolderDnd";
 
+const VERSION = chrome.runtime.getManifest().version;
+
 export function Sidebar() {
 	const bookmarkTree = useBookmarkStore(state => state.bookmarkTree);
 	const collapsedFolders = useBookmarkStore(state => state.collapsedFolders);
@@ -96,6 +98,9 @@ export function Sidebar() {
 			<div className="flex-1 overflow-auto py-3" onClick={() => setFocusArea("sidebar")}>
 				<FolderTree rows={rows} />
 			</div>
+
+			{/* Version */}
+			<div className="px-4 py-2 text-xs text-tertiary">v{VERSION}</div>
 
 			{/* Resize handle - centered on sidebar right edge */}
 			<div
