@@ -1,83 +1,92 @@
-import { useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { useSearchStore } from "../stores/searchStore";
 import { useBookmarkStore } from "../stores/bookmarkStore";
-import { useDebouncedCallback } from "../hooks/useDebounce";
+import { useUIStore } from "../stores/uiStore";
+import { searchBookmarks } from "../lib/search";
+import { focusGrid, SEARCH_INPUT_ID } from "../lib/focus";
+import { openTargetFromEvent, openUrl } from "../lib/open-url";
+
+const SHORTCUT_LABEL = /Mac|iPhone|iPad/.test(navigator.userAgent) ? "⌘K" : "Ctrl+K";
 
 export function SearchBar() {
-	const inputRef = useRef<HTMLInputElement>(null);
 	const query = useSearchStore(state => state.query);
-	const search = useSearchStore(state => state.search);
+	const setQuery = useSearchStore(state => state.setQuery);
 	const clearSearch = useSearchStore(state => state.clearSearch);
-	const bookmarkTree = useBookmarkStore(state => state.bookmarkTree);
+	const navigateToFolder = useBookmarkStore(state => state.navigateToFolder);
+	const openInNewTab = useUIStore(state => state.openInNewTab);
 
-	// Local state for immediate input feedback, debounced search
-	const [localQuery, setLocalQuery] = useState(query);
-
-	// Sync local state when store query changes (e.g., on clear)
-	useEffect(() => {
-		setLocalQuery(query);
-	}, [query]);
-
-	// Debounced search - updates both query and results atomically
-	const debouncedSearch = useDebouncedCallback((value: string) => {
-		search(bookmarkTree, value);
-	}, 300);
-
-	const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-		const value = e.target.value;
-		setLocalQuery(value);
-		debouncedSearch(value);
-	};
-
-	const handleClear = () => {
-		setLocalQuery("");
-		clearSearch();
-		inputRef.current?.focus();
-	};
-
-	// Keyboard shortcut: Cmd/Ctrl+K to focus search
-	useEffect(() => {
-		const handleKeyDown = (e: KeyboardEvent) => {
-			if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+	const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+		switch (e.key) {
+			case "Escape":
 				e.preventDefault();
-				inputRef.current?.focus();
-			}
-			if (e.key === "Escape" && document.activeElement === inputRef.current) {
-				handleClear();
-				inputRef.current?.blur();
-			}
-		};
+				if (query) {
+					clearSearch();
+				} else {
+					e.currentTarget.blur();
+				}
+				break;
 
-		window.addEventListener("keydown", handleKeyDown);
-		return () => window.removeEventListener("keydown", handleKeyDown);
-	}, []);
+			case "ArrowDown":
+				if (query.trim() && focusGrid()) e.preventDefault();
+				break;
+
+			case "Enter": {
+				// Search again rather than reading the rendered results, which can lag a keystroke behind.
+				const { bookmarks, folders } = searchBookmarks(useBookmarkStore.getState().bookmarkTree, query);
+				const topBookmark = bookmarks[0];
+				const topFolder = folders[0]?.folder;
+				if (topBookmark?.url) {
+					e.preventDefault();
+					void openUrl(topBookmark.url, openTargetFromEvent(e, openInNewTab));
+				} else if (topFolder) {
+					e.preventDefault();
+					clearSearch();
+					navigateToFolder(topFolder.id);
+				}
+				break;
+			}
+		}
+	};
 
 	return (
-		<div className="relative flex-1 max-w-xl">
-			<Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-tertiary" />
+		<div role="search" className="relative flex-1 max-w-xl">
+			<Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-tertiary" aria-hidden="true" />
 			<input
-				ref={inputRef}
+				id={SEARCH_INPUT_ID}
 				type="text"
-				value={localQuery}
-				onChange={handleChange}
-				placeholder="Search bookmarks... (Cmd+K)"
+				role="searchbox"
+				aria-label="Search bookmarks"
+				aria-describedby="bookmark-search-hint"
+				autoComplete="off"
+				spellCheck={false}
+				value={query}
+				onChange={e => setQuery(e.target.value)}
+				onKeyDown={handleKeyDown}
+				placeholder={`Search bookmarks (${SHORTCUT_LABEL})`}
 				className={`
-          w-full h-10 pl-10 pr-10 
-          bg-secondary text-primary
-          rounded-lg
-          placeholder:text-tertiary
-          focus:outline-none
-          transition-colors
-        `}
+					w-full h-10 pl-10 pr-10
+					bg-secondary text-primary
+					rounded-lg
+					placeholder:text-tertiary
+					focus:outline-none focus:border-[var(--accent-color)]
+					transition-colors
+				`}
 			/>
-			{localQuery && (
+			<span id="bookmark-search-hint" className="sr-only">
+				Press Enter to open the top result, or the down arrow to browse the results.
+			</span>
+			{query && (
 				<button
-					onClick={handleClear}
+					type="button"
+					onClick={() => {
+						clearSearch();
+						document.getElementById(SEARCH_INPUT_ID)?.focus();
+					}}
 					className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-tertiary transition-colors cursor-pointer"
+					aria-label="Clear search"
 					title="Clear search"
 				>
-					<X className="w-4 h-4 text-tertiary" />
+					<X className="w-4 h-4 text-tertiary" aria-hidden="true" />
 				</button>
 			)}
 		</div>

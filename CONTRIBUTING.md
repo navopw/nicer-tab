@@ -55,6 +55,9 @@ When proposing a new feature, please:
     # Type-check code
     npm run compile
 
+    # Run the unit tests
+    npm test
+
     # Build for Chrome & Firefox to verify everything compiles
     npm run build
     npm run build:firefox
@@ -86,6 +89,7 @@ Nicer Tab is built using [WXT](https://wxt.dev/) with React 19, Tailwind CSS 4, 
 - `npm run zip` - Package the production Chrome extension into a ZIP file for submission.
 - `npm run zip:firefox` - Package the production Firefox extension into a ZIP file for submission.
 - `npm run compile` - Check TypeScript files for type-safety without emitting files.
+- `npm test` - Run the unit tests (Vitest) for the pure logic in `src/lib`.
 - `npm run format` - Format files using Prettier.
 
 Thank you again for contributing!

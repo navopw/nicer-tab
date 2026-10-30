@@ -1,90 +1,137 @@
-import { useRef } from "react";
-import { Download, Upload } from "lucide-react";
+import { useRef, useState } from "react";
+import { Download, FileCode, Upload } from "lucide-react";
 import { useUIStore } from "../../../stores/uiStore";
-import { exportBookmarks, importBookmarks } from "../../../lib/import-export";
+import { showErrorToast, showToast } from "../../../stores/toastStore";
+import {
+	exportBookmarksHtml,
+	exportBookmarksJson,
+	importBookmarksFile,
+	type ImportResult
+} from "../../../lib/import-export";
+import { Switch } from "../../common/Switch";
 
-interface GeneralSettingsProps {
-	onClose: () => void;
+function describeImport(result: ImportResult): string {
+	const parts = [`Imported ${result.created} bookmark${result.created === 1 ? "" : "s"}`];
+	if (result.skipped > 0) parts.push(`skipped ${result.skipped} already saved`);
+	if (result.failed > 0) parts.push(`${result.failed} could not be added`);
+	const summary = parts.join(", ");
+	return result.settingsRestored ? `${summary}. Settings restored.` : `${summary}.`;
 }
 
-export function GeneralSettings({ onClose }: GeneralSettingsProps) {
+const dataButtonClass =
+	"flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-theme text-primary hover:bg-sidebar-hover transition-colors disabled:opacity-50 cursor-pointer";
+
+export function GeneralSettings() {
+	const openInNewTab = useUIStore(state => state.openInNewTab);
+	const setOpenInNewTab = useUIStore(state => state.setOpenInNewTab);
 	const showFolderBookmarkCount = useUIStore(state => state.showFolderBookmarkCount);
 	const setShowFolderBookmarkCount = useUIStore(state => state.setShowFolderBookmarkCount);
+	const useGoogleFavicons = useUIStore(state => state.useGoogleFavicons);
+	const setUseGoogleFavicons = useUIStore(state => state.setUseGoogleFavicons);
 	const fileInputRef = useRef<HTMLInputElement>(null);
+	const [isImporting, setIsImporting] = useState(false);
 
-	const handleExport = async () => {
+	const runExport = async (task: () => Promise<void>) => {
 		try {
-			await exportBookmarks();
+			await task();
 		} catch (error) {
-			alert("Failed to export bookmarks");
+			showErrorToast("Export failed", error);
 		}
-	};
-
-	const handleImport = () => {
-		fileInputRef.current?.click();
 	};
 
 	const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
 		const file = e.target.files?.[0];
+		e.target.value = "";
 		if (!file) return;
 
+		setIsImporting(true);
 		try {
-			await importBookmarks(file, "merge");
-			onClose();
-			window.location.reload();
+			showToast({ message: describeImport(await importBookmarksFile(file)) });
 		} catch (error) {
-			alert("Failed to import bookmarks");
+			showErrorToast(error instanceof Error ? `Import failed: ${error.message}` : "Import failed", error);
+		} finally {
+			setIsImporting(false);
 		}
 	};
 
 	return (
 		<div className="space-y-6">
-			{/* Sidebar Section */}
-			<div>
+			<section>
+				<h3 className="text-sm font-medium text-secondary mb-3">Bookmarks</h3>
+				<Switch
+					label="Open in a new tab"
+					description="Otherwise bookmarks replace this page. Cmd/Ctrl-click always opens a new tab."
+					checked={openInNewTab}
+					onChange={setOpenInNewTab}
+				/>
+			</section>
+
+			<section>
 				<h3 className="text-sm font-medium text-secondary mb-3">Sidebar</h3>
-				<div className="flex items-center justify-between">
-					<div>
-						<label className="text-sm text-primary">Show bookmark count</label>
-						<p className="text-xs text-tertiary">Display bookmark count badge in folders</p>
+				<Switch
+					label="Show bookmark count"
+					description="Display bookmark count badge in folders"
+					checked={showFolderBookmarkCount}
+					onChange={setShowFolderBookmarkCount}
+				/>
+			</section>
+
+			<section>
+				<h3 className="text-sm font-medium text-secondary mb-3">Privacy</h3>
+				<Switch
+					label="Fetch missing icons from Google"
+					description="Sends a site's domain to Google's favicon service when the browser has no icon for it. Off shows a letter instead."
+					checked={useGoogleFavicons}
+					onChange={setUseGoogleFavicons}
+				/>
+			</section>
+
+			<section>
+				<h3 className="text-sm font-medium text-secondary mb-1">Data</h3>
+				<p className="text-xs text-tertiary mb-3">
+					Imports are added to your bookmarks; anything you already have is skipped.
+				</p>
+				<div className="space-y-3">
+					<div className="flex gap-3">
+						<button
+							type="button"
+							onClick={() => runExport(exportBookmarksJson)}
+							className={dataButtonClass}
+							title="Bookmarks, settings and custom icons"
+						>
+							<Download className="w-4 h-4" aria-hidden="true" />
+							<span className="text-sm">Back up (.json)</span>
+						</button>
+						<button
+							type="button"
+							onClick={() => runExport(exportBookmarksHtml)}
+							className={dataButtonClass}
+							title="A bookmark file other browsers can import"
+						>
+							<FileCode className="w-4 h-4" aria-hidden="true" />
+							<span className="text-sm">Export (.html)</span>
+						</button>
 					</div>
 					<button
-						onClick={() => setShowFolderBookmarkCount(!showFolderBookmarkCount)}
-						className={`relative w-10 h-6 rounded-full transition-colors cursor-pointer ${
-							showFolderBookmarkCount ? "bg-[var(--accent-color)]" : "bg-tertiary"
-						}`}
+						type="button"
+						onClick={() => fileInputRef.current?.click()}
+						disabled={isImporting}
+						className={`w-full ${dataButtonClass}`}
 					>
-						<span
-							className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${
-								showFolderBookmarkCount ? "translate-x-4" : ""
-							}`}
-						/>
+						<Upload className="w-4 h-4" aria-hidden="true" />
+						<span className="text-sm">{isImporting ? "Importing..." : "Import (.json or .html)"}</span>
 					</button>
 				</div>
-			</div>
-
-			{/* Import/Export Section */}
-			<div>
-				<h3 className="text-sm font-medium text-secondary mb-3">Data</h3>
-				<div className="flex gap-3">
-					<button
-						onClick={handleExport}
-						className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-theme text-primary hover:bg-sidebar-hover transition-colors cursor-pointer"
-					>
-						<Download className="w-4 h-4" />
-						<span className="text-sm">Export</span>
-					</button>
-					<button
-						onClick={handleImport}
-						className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-theme text-primary hover:bg-sidebar-hover transition-colors cursor-pointer"
-					>
-						<Upload className="w-4 h-4" />
-						<span className="text-sm">Import</span>
-					</button>
-				</div>
-			</div>
+			</section>
 
 			{/* Hidden file input */}
-			<input ref={fileInputRef} type="file" accept=".json" onChange={handleFileChange} className="hidden" />
+			<input
+				ref={fileInputRef}
+				type="file"
+				accept=".json,.html,.htm,application/json,text/html"
+				onChange={handleFileChange}
+				className="hidden"
+			/>
 		</div>
 	);
 }

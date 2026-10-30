@@ -1,19 +1,19 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { pointerIntersection } from "@dnd-kit/collision";
 import { useDraggable, useDroppable } from "@dnd-kit/react";
-import { ChevronRight, Folder, FolderOpen, FolderPlus, GripVertical, Pencil, Trash2 } from "lucide-react";
+import { ChevronRight, Folder, FolderOpen, GripVertical } from "lucide-react";
 import { useBookmarkStore } from "../../stores/bookmarkStore";
 import { useFolderDragStore } from "../../stores/folderDragStore";
 import { useUIStore } from "../../stores/uiStore";
 import { FOLDER_BASE_PADDING, FOLDER_INDENT, type FlatFolder } from "../../lib/folder-tree";
 import { isFolder } from "../../types/bookmark";
-import { ContextMenu, type ContextMenuItem } from "../common/ContextMenu";
-import { CreateSubfolderModal } from "../modals/CreateSubfolderModal";
-import { RenameFolderModal } from "../modals/RenameFolderModal";
-import { ConfirmDialog } from "../common/ConfirmDialog";
+import { useFolderActions } from "../../hooks/useFolderActions";
+import { ContextMenu, contextMenuPosition } from "../common/ContextMenu";
 
 interface FolderItemProps {
 	row: FlatFolder;
+	/** Whether this row is the tree's single tab stop (roving tabindex). */
+	isTabStop: boolean;
 }
 
 /** Horizontal offset of the drop indicator, aligned with the folder icon at that depth. */
@@ -21,29 +21,22 @@ function indicatorInset(depth: number): number {
 	return 8 + FOLDER_BASE_PADDING + depth * FOLDER_INDENT;
 }
 
-export function FolderItem({ row }: FolderItemProps) {
+export function FolderItem({ row, isTabStop }: FolderItemProps) {
 	const { folder, depth, parentId, hasChildFolders, isExpanded } = row;
 
+	const rowRef = useRef<HTMLDivElement>(null);
 	const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-	const [showCreateModal, setShowCreateModal] = useState(false);
-	const [showRenameModal, setShowRenameModal] = useState(false);
-	const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-	const [isDeleting, setIsDeleting] = useState(false);
-	const selectedFolderId = useBookmarkStore(state => state.selectedFolderId);
+	const isSelected = useBookmarkStore(state => state.selectedFolderId === folder.id);
 	const setSelectedFolderId = useBookmarkStore(state => state.setSelectedFolderId);
 	const toggleFolderExpanded = useBookmarkStore(state => state.toggleFolderExpanded);
-	const setFolderExpanded = useBookmarkStore(state => state.setFolderExpanded);
-	const createBookmark = useBookmarkStore(state => state.createBookmark);
-	const updateBookmark = useBookmarkStore(state => state.updateBookmark);
-	const deleteBookmark = useBookmarkStore(state => state.deleteBookmark);
 	const showFolderBookmarkCount = useUIStore(state => state.showFolderBookmarkCount);
+	const { menuItems, dialogs, handleKey } = useFolderActions(folder);
 
 	// Subscribe to primitives so a pointer move only re-renders the rows it touches.
 	const dropMode = useFolderDragStore(state => (state.drop?.rowId === folder.id ? state.drop.mode : null));
 	const dropDepth = useFolderDragStore(state => (state.drop?.rowId === folder.id ? state.drop.depth : 0));
 	const isTravelling = useFolderDragStore(state => state.draggedSubtreeIds.has(folder.id));
 
-	const isSelected = selectedFolderId === folder.id;
 	// The permanent Chrome folders (Bookmarks Bar, Other Bookmarks, ...) cannot be moved.
 	const isRootFolder = depth === 0;
 
@@ -76,6 +69,11 @@ export function FolderItem({ row }: FolderItemProps) {
 	const isLifted = draggable.isDragging;
 	const isLeftBehind = isTravelling && !isLifted;
 
+	// Keep the open folder in view, e.g. after it was restored on startup or opened from the grid.
+	useEffect(() => {
+		if (isSelected) rowRef.current?.scrollIntoView({ block: "nearest" });
+	}, [isSelected]);
+
 	const handleClick = () => {
 		setSelectedFolderId(folder.id);
 	};
@@ -85,61 +83,15 @@ export function FolderItem({ row }: FolderItemProps) {
 		toggleFolderExpanded(folder.id);
 	};
 
-	const handleContextMenu = (e: React.MouseEvent) => {
+	const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
 		e.preventDefault();
 		e.stopPropagation();
-		setContextMenu({ x: e.clientX, y: e.clientY });
+		setContextMenu(contextMenuPosition(e));
 	};
 
-	const handleCreateSubfolder = async (name: string) => {
-		await createBookmark(folder.id, name);
-		// Expand the parent folder to show the new subfolder
-		setFolderExpanded(folder.id, true);
+	const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+		if (e.target === e.currentTarget && handleKey(e)) e.preventDefault();
 	};
-
-	const handleRenameFolder = async (name: string) => {
-		await updateBookmark(folder.id, { title: name });
-	};
-
-	const handleDeleteFolder = async () => {
-		setIsDeleting(true);
-		try {
-			// If this folder is selected, clear selection
-			if (selectedFolderId === folder.id) {
-				setSelectedFolderId(null);
-			}
-			await deleteBookmark(folder.id);
-			setShowDeleteConfirm(false);
-		} finally {
-			setIsDeleting(false);
-		}
-	};
-
-	const contextMenuItems: ContextMenuItem[] = [
-		{
-			id: "create-subfolder",
-			label: "Create subfolder",
-			icon: <FolderPlus className="w-4 h-4" />,
-			onClick: () => setShowCreateModal(true)
-		},
-		...(!isRootFolder
-			? [
-					{
-						id: "rename-folder",
-						label: "Rename folder",
-						icon: <Pencil className="w-4 h-4" />,
-						onClick: () => setShowRenameModal(true)
-					},
-					{
-						id: "delete-folder",
-						label: "Remove folder",
-						icon: <Trash2 className="w-4 h-4" />,
-						onClick: () => setShowDeleteConfirm(true),
-						danger: true
-					}
-				]
-			: [])
-	];
 
 	// Count bookmarks (not folders) in this folder
 	const bookmarkCount = folder.children?.filter(c => !isFolder(c)).length ?? 0;
@@ -154,10 +106,22 @@ export function FolderItem({ row }: FolderItemProps) {
 	);
 
 	return (
-		<li ref={setNodeRef} className="relative py-0.5 group/folder">
+		<li ref={setNodeRef} role="none" className="relative py-0.5 group/folder">
 			{dropMode === "before" && dropLine("top")}
 
 			<div
+				ref={rowRef}
+				role="treeitem"
+				aria-level={depth + 1}
+				aria-expanded={hasChildFolders ? isExpanded : undefined}
+				aria-selected={isSelected}
+				aria-label={
+					showFolderBookmarkCount && bookmarkCount > 0
+						? `${folder.title || "Untitled"}, ${bookmarkCount} bookmark${bookmarkCount === 1 ? "" : "s"}`
+						: folder.title || "Untitled"
+				}
+				tabIndex={isTabStop ? 0 : -1}
+				data-folder-id={folder.id}
 				className={`
 							flex items-center gap-2 px-3 py-2 mx-2 rounded-lg cursor-pointer
 							transition-colors duration-150
@@ -172,9 +136,13 @@ export function FolderItem({ row }: FolderItemProps) {
 				}}
 				onClick={handleClick}
 				onContextMenu={handleContextMenu}
+				onKeyDown={handleKeyDown}
 			>
-				{/* Expand/collapse chevron */}
+				{/* Expand/collapse chevron - the arrow keys do this for keyboard users */}
 				<button
+					type="button"
+					tabIndex={-1}
+					aria-hidden="true"
 					onClick={handleToggle}
 					className={`
             w-4 h-4 flex items-center justify-center rounded cursor-pointer
@@ -187,7 +155,7 @@ export function FolderItem({ row }: FolderItemProps) {
 				</button>
 
 				{/* Folder icon */}
-				<span className="flex items-center">
+				<span className="flex items-center" aria-hidden="true">
 					{isExpanded ? (
 						<FolderOpen className="w-4 h-4 flex-shrink-0" />
 					) : (
@@ -201,6 +169,7 @@ export function FolderItem({ row }: FolderItemProps) {
 				{/* Bookmark count badge */}
 				{showFolderBookmarkCount && bookmarkCount > 0 && (
 					<span
+						aria-hidden="true"
 						className={`
               text-xs px-1.5 py-0.5 rounded-full
               ${isSelected ? "bg-white/20 text-white" : "bg-[var(--bg-tertiary)] text-secondary"}
@@ -212,7 +181,10 @@ export function FolderItem({ row }: FolderItemProps) {
 
 				{/* Drag affordance - the whole row is draggable */}
 				{!isRootFolder && (
-					<GripVertical className="w-4 h-4 flex-shrink-0 opacity-0 group-hover/folder:opacity-60 cursor-grab active:cursor-grabbing" />
+					<GripVertical
+						aria-hidden="true"
+						className="w-4 h-4 flex-shrink-0 opacity-0 group-hover/folder:opacity-60 cursor-grab active:cursor-grabbing"
+					/>
 				)}
 			</div>
 
@@ -223,38 +195,13 @@ export function FolderItem({ row }: FolderItemProps) {
 				<ContextMenu
 					x={contextMenu.x}
 					y={contextMenu.y}
-					items={contextMenuItems}
+					items={menuItems}
+					label={folder.title || "Untitled"}
 					onClose={() => setContextMenu(null)}
 				/>
 			)}
 
-			{/* Create subfolder modal */}
-			<CreateSubfolderModal
-				isOpen={showCreateModal}
-				onClose={() => setShowCreateModal(false)}
-				parentFolderName={folder.title || "Untitled"}
-				onCreate={handleCreateSubfolder}
-			/>
-
-			{/* Rename folder modal */}
-			<RenameFolderModal
-				isOpen={showRenameModal}
-				onClose={() => setShowRenameModal(false)}
-				currentName={folder.title || "Untitled"}
-				onRename={handleRenameFolder}
-			/>
-
-			{/* Delete folder confirmation */}
-			<ConfirmDialog
-				isOpen={showDeleteConfirm}
-				onClose={() => setShowDeleteConfirm(false)}
-				onConfirm={handleDeleteFolder}
-				title="Remove folder"
-				message={`Are you sure you want to remove "${folder.title || "Untitled"}" and all its contents? This action cannot be undone.`}
-				confirmLabel="Remove"
-				isDestructive
-				isLoading={isDeleting}
-			/>
+			{dialogs}
 		</li>
 	);
 }

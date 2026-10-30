@@ -3,85 +3,49 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { isFolder, type BookmarkNode } from "../types/bookmark";
 import { chromeStorage } from "../lib/chrome-storage";
 import { removeFaviconOverrides } from "../lib/favicon-storage";
-
-// Flag to skip listener refresh when we're already handling the update
-let skipNextRefresh = false;
+import {
+	collectBookmarkIds,
+	collectFolderIds,
+	findNodeById,
+	getPathToNode,
+	optimisticallyMoveNode
+} from "../lib/bookmark-tree";
+import { showErrorToast } from "./toastStore";
 
 interface BookmarkState {
 	bookmarkTree: BookmarkNode[];
 	selectedFolderId: string | null;
 	collapsedFolders: Set<string>;
-	isLoading: boolean;
+	/** False until the first successful load, so the page can render in one go. */
+	hasLoaded: boolean;
+	/** Only set when the initial load fails; later failures surface as toasts. */
 	error: string | null;
 
-	// Actions
-	setBookmarkTree: (tree: BookmarkNode[]) => void;
 	setSelectedFolderId: (id: string | null) => void;
+	/** Select a folder and expand its ancestors so it is visible in the sidebar. */
+	navigateToFolder: (id: string) => void;
 	toggleFolderExpanded: (id: string) => void;
 	setFolderExpanded: (id: string, expanded: boolean) => void;
-	setLoading: (loading: boolean) => void;
-	setError: (error: string | null) => void;
 
-	// Bookmark operations
+	// Bookmark operations. The tree itself is refreshed by the bookmark event
+	// listeners, so these only talk to the browser and report failures.
 	fetchBookmarks: () => Promise<void>;
 	createBookmark: (parentId: string, title: string, url?: string) => Promise<BookmarkNode | null>;
-	updateBookmark: (id: string, changes: { title?: string; url?: string }) => Promise<void>;
-	deleteBookmark: (id: string) => Promise<void>;
-	moveBookmark: (id: string, destination: { parentId: string; index?: number }) => Promise<void>;
+	updateBookmark: (id: string, changes: { title?: string; url?: string }) => Promise<boolean>;
+	deleteBookmark: (id: string) => Promise<boolean>;
+	moveBookmark: (id: string, destination: { parentId: string; index?: number }) => Promise<boolean>;
 
 	// Helpers
 	getBookmarksInFolder: (folderId: string) => BookmarkNode[];
 	getFolderPath: (folderId: string) => BookmarkNode[];
 }
 
-// Helper to find a node by ID in the tree
-function findNodeById(nodes: BookmarkNode[], id: string): BookmarkNode | null {
-	for (const node of nodes) {
-		if (node.id === id) return node;
-		if (node.children) {
-			const found = findNodeById(node.children, id);
-			if (found) return found;
-		}
-	}
-	return null;
-}
-
-// Helper to get path to a node
-function getPathToNode(nodes: BookmarkNode[], id: string, path: BookmarkNode[] = []): BookmarkNode[] | null {
-	for (const node of nodes) {
-		if (node.id === id) return [...path, node];
-		if (node.children) {
-			const found = getPathToNode(node.children, id, [...path, node]);
-			if (found) return found;
-		}
-	}
-	return null;
-}
-
-function collectBookmarkIds(node: BookmarkNode, ids: string[] = []): string[] {
-	if (node.url) {
-		ids.push(node.id);
-	}
-
-	if (node.children) {
-		for (const child of node.children) {
-			collectBookmarkIds(child, ids);
-		}
-	}
-
-	return ids;
-}
-
-function collectFolderIds(nodes: BookmarkNode[], ids: Set<string> = new Set()): Set<string> {
-	for (const node of nodes) {
-		if (isFolder(node)) {
-			ids.add(node.id);
-			collectFolderIds(node.children ?? [], ids);
-		}
-	}
-
-	return ids;
-}
+/**
+ * Bumped on every optimistic update. A fetch that started before the bump would
+ * overwrite the optimistic tree with stale data, so its result is dropped; the
+ * bookmark event that follows the change triggers a fresh one.
+ */
+let treeGeneration = 0;
 
 /**
  * Drop persisted IDs of folders that no longer exist so the stored set does not
@@ -96,80 +60,19 @@ function pruneCollapsedFolders(collapsed: Set<string>, tree: BookmarkNode[]): Se
 	return pruned.size === collapsed.size ? collapsed : pruned;
 }
 
-// Helper to optimistically move a node in the tree
-// This mimics Chrome's behavior: insert at new position BEFORE removing from old position
-function optimisticallyMoveNode(
-	tree: BookmarkNode[],
-	nodeId: string,
-	destination: { parentId: string; index?: number }
-): BookmarkNode[] | null {
-	// Deep clone the tree to avoid mutations
-	const clonedTree = JSON.parse(JSON.stringify(tree)) as BookmarkNode[];
-
-	// Find the node to move
-	const node = findNodeById(clonedTree, nodeId);
-	if (!node) return null;
-
-	const sourceIndex = node.index;
-	const sourceParentId = node.parentId;
-
-	// Find the current parent
-	const currentParent = sourceParentId ? findNodeById(clonedTree, sourceParentId) : null;
-
-	// Find the new parent
-	const newParent = findNodeById(clonedTree, destination.parentId);
-	if (!newParent) return null;
-
-	if (!newParent.children) {
-		newParent.children = [];
+/** Keep the selected folder if it still exists, otherwise fall back to the Bookmarks Bar. */
+function resolveSelectedFolder(tree: BookmarkNode[], selectedId: string | null): string | null {
+	if (selectedId) {
+		const node = findNodeById(tree, selectedId);
+		if (node && isFolder(node) && node.parentId) return selectedId;
 	}
-
-	const isSameParent = sourceParentId === destination.parentId;
-	let targetIndex = destination.index !== undefined ? destination.index : newParent.children.length;
-
-	if (isSameParent && sourceIndex !== undefined) {
-		// Moving within same parent - Chrome inserts before removing
-		// So if we're moving forward (to higher index), the actual final position
-		// will be targetIndex - 1 after the source is removed
-		// The caller already added +1 for forward moves, so we need to subtract 1 here
-		// to get the correct final position in our "remove first" implementation
-		if (sourceIndex < targetIndex) {
-			targetIndex--;
-		}
-	}
-
-	// Remove from current parent
-	if (currentParent?.children) {
-		const currentIndex = currentParent.children.findIndex(c => c.id === nodeId);
-		if (currentIndex !== -1) {
-			currentParent.children.splice(currentIndex, 1);
-		}
-	}
-
-	// Add to new parent at the adjusted target index
-	// Clamp to valid range
-	targetIndex = Math.max(0, Math.min(targetIndex, newParent.children.length));
-	newParent.children.splice(targetIndex, 0, node);
-
-	// Update the moved node's parentId
-	node.parentId = destination.parentId;
-
-	// Update indices of all children in affected parents
-	if (currentParent?.children) {
-		currentParent.children.forEach((child, idx) => {
-			child.index = idx;
-		});
-	}
-	newParent.children.forEach((child, idx) => {
-		child.index = idx;
-	});
-
-	return clonedTree;
+	return tree[0]?.children?.[0]?.id ?? null;
 }
 
-/** Only the expand/collapse state survives a reload - everything else is derived from Chrome. */
+/** The last opened folder and the expand/collapse state survive a reload - everything else comes from Chrome. */
 interface PersistedBookmarkState {
 	collapsedFolderIds: string[];
+	selectedFolderId?: string | null;
 }
 
 export const useBookmarkStore = create<BookmarkState>()(
@@ -178,11 +81,20 @@ export const useBookmarkStore = create<BookmarkState>()(
 			bookmarkTree: [],
 			selectedFolderId: null,
 			collapsedFolders: new Set(), // All folders expanded by default
-			isLoading: true,
+			hasLoaded: false,
 			error: null,
 
-			setBookmarkTree: tree => set({ bookmarkTree: tree }),
 			setSelectedFolderId: id => set({ selectedFolderId: id }),
+
+			navigateToFolder: id =>
+				set(state => {
+					const ancestors = getPathToNode(state.bookmarkTree, id)?.slice(0, -1) ?? [];
+					const collapsedFolders = new Set(state.collapsedFolders);
+					for (const ancestor of ancestors) {
+						collapsedFolders.delete(ancestor.id);
+					}
+					return { selectedFolderId: id, collapsedFolders };
+				}),
 
 			toggleFolderExpanded: id =>
 				set(state => {
@@ -197,6 +109,7 @@ export const useBookmarkStore = create<BookmarkState>()(
 
 			setFolderExpanded: (id, expanded) =>
 				set(state => {
+					if (state.collapsedFolders.has(id) !== expanded) return state;
 					const newCollapsed = new Set(state.collapsedFolders);
 					if (expanded) {
 						newCollapsed.delete(id);
@@ -206,39 +119,32 @@ export const useBookmarkStore = create<BookmarkState>()(
 					return { collapsedFolders: newCollapsed };
 				}),
 
-			setLoading: loading => set({ isLoading: loading }),
-			setError: error => set({ error }),
-
 			fetchBookmarks: async () => {
-				set({ isLoading: true, error: null });
+				const generation = treeGeneration;
 				try {
-					const tree = await chrome.bookmarks.getTree();
+					const tree = (await chrome.bookmarks.getTree()) as BookmarkNode[];
+					if (generation !== treeGeneration) return;
 					set(state => ({
 						bookmarkTree: tree,
-						isLoading: false,
+						hasLoaded: true,
+						error: null,
 						collapsedFolders: pruneCollapsedFolders(state.collapsedFolders, tree),
-						// Select Bookmarks Bar by default if no folder is selected
-						selectedFolderId: state.selectedFolderId ?? tree[0]?.children?.[0]?.id ?? null
+						selectedFolderId: resolveSelectedFolder(tree, state.selectedFolderId)
 					}));
 				} catch (error) {
-					set({
-						error: error instanceof Error ? error.message : "Failed to load bookmarks",
-						isLoading: false
-					});
+					if (get().hasLoaded) {
+						showErrorToast("Could not refresh bookmarks", error);
+					} else {
+						set({ error: error instanceof Error ? error.message : "Failed to load bookmarks" });
+					}
 				}
 			},
 
 			createBookmark: async (parentId, title, url) => {
 				try {
-					const newBookmark = await chrome.bookmarks.create({
-						parentId,
-						title,
-						url
-					});
-					await get().fetchBookmarks();
-					return newBookmark as BookmarkNode;
+					return (await chrome.bookmarks.create({ parentId, title, url })) as BookmarkNode;
 				} catch (error) {
-					set({ error: error instanceof Error ? error.message : "Failed to create bookmark" });
+					showErrorToast(url ? "Could not create bookmark" : "Could not create folder", error);
 					return null;
 				}
 			},
@@ -246,9 +152,10 @@ export const useBookmarkStore = create<BookmarkState>()(
 			updateBookmark: async (id, changes) => {
 				try {
 					await chrome.bookmarks.update(id, changes);
-					await get().fetchBookmarks();
+					return true;
 				} catch (error) {
-					set({ error: error instanceof Error ? error.message : "Failed to update bookmark" });
+					showErrorToast("Could not save changes", error);
+					return false;
 				}
 			},
 
@@ -262,87 +169,90 @@ export const useBookmarkStore = create<BookmarkState>()(
 						await chrome.bookmarks.remove(id);
 					}
 					await removeFaviconOverrides(bookmarkIdsToClear);
-					await get().fetchBookmarks();
+					return true;
 				} catch (error) {
-					set({ error: error instanceof Error ? error.message : "Failed to delete bookmark" });
+					showErrorToast("Could not delete", error);
+					return false;
 				}
 			},
 
 			moveBookmark: async (id, destination) => {
 				const previousTree = get().bookmarkTree;
+				const updatedTree = optimisticallyMoveNode(previousTree, id, destination);
+				if (updatedTree) {
+					treeGeneration++;
+					set({ bookmarkTree: updatedTree });
+				}
+
 				try {
-					// Optimistically update the tree before the Chrome API call completes
-					const updatedTree = optimisticallyMoveNode(previousTree, id, destination);
-					if (updatedTree) {
-						set({ bookmarkTree: updatedTree });
-					}
-
-					// Skip the listener refresh since we've already updated optimistically
-					skipNextRefresh = true;
-
-					// Perform the actual Chrome API call
 					await chrome.bookmarks.move(id, destination);
-
-					// Reset the flag after a short delay to allow the Chrome event to pass
-					setTimeout(() => {
-						skipNextRefresh = false;
-					}, 100);
+					return true;
 				} catch (error) {
-					skipNextRefresh = false;
-					// Revert on error and sync with Chrome's actual state
+					treeGeneration++;
 					set({ bookmarkTree: previousTree });
+					showErrorToast("Could not move bookmark", error);
 					await get().fetchBookmarks();
-					set({ error: error instanceof Error ? error.message : "Failed to move bookmark" });
+					return false;
 				}
 			},
 
 			getBookmarksInFolder: folderId => {
-				const { bookmarkTree } = get();
-				const folder = findNodeById(bookmarkTree, folderId);
+				const folder = findNodeById(get().bookmarkTree, folderId);
 				// Sort by Chrome index to ensure correct order
 				const children = folder?.children ?? [];
 				return [...children].sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
 			},
 
-			getFolderPath: folderId => {
-				const { bookmarkTree } = get();
-				return getPathToNode(bookmarkTree, folderId) ?? [];
-			}
+			getFolderPath: folderId => getPathToNode(get().bookmarkTree, folderId) ?? []
 		}),
 		{
 			name: "nicer-tab-folders",
 			storage: createJSONStorage(() => chromeStorage),
 			// A Set is not JSON serialisable, so it is stored as a plain array.
 			partialize: (state): PersistedBookmarkState => ({
-				collapsedFolderIds: [...state.collapsedFolders]
+				collapsedFolderIds: [...state.collapsedFolders],
+				selectedFolderId: state.selectedFolderId
 			}),
-			merge: (persisted, current) => ({
-				...current,
-				collapsedFolders: new Set((persisted as PersistedBookmarkState | undefined)?.collapsedFolderIds ?? [])
-			})
+			merge: (persisted, current) => {
+				const saved = persisted as PersistedBookmarkState | undefined;
+				return {
+					...current,
+					collapsedFolders: new Set(saved?.collapsedFolderIds ?? []),
+					selectedFolderId: saved?.selectedFolderId ?? current.selectedFolderId
+				};
+			}
 		}
 	)
 );
 
+/** Coalesces bursts of bookmark events (imports, sync) into a single refresh. */
+const REFRESH_DELAY = 50;
+let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+
+function scheduleRefresh() {
+	clearTimeout(refreshTimer);
+	refreshTimer = setTimeout(() => useBookmarkStore.getState().fetchBookmarks(), REFRESH_DELAY);
+}
+
 // Setup Chrome bookmark event listeners
 export function setupBookmarkListeners() {
-	const refresh = () => useBookmarkStore.getState().fetchBookmarks();
+	const events = [
+		chrome.bookmarks.onCreated,
+		chrome.bookmarks.onRemoved,
+		chrome.bookmarks.onChanged,
+		chrome.bookmarks.onMoved,
+		// Firefox does not implement this one.
+		chrome.bookmarks.onChildrenReordered
+	].filter(Boolean);
 
-	const onMoved = () => {
-		// Skip refresh if we just did an optimistic update
-		if (skipNextRefresh) return;
-		refresh();
-	};
-
-	chrome.bookmarks.onCreated.addListener(refresh);
-	chrome.bookmarks.onRemoved.addListener(refresh);
-	chrome.bookmarks.onChanged.addListener(refresh);
-	chrome.bookmarks.onMoved.addListener(onMoved);
+	for (const event of events) {
+		event.addListener(scheduleRefresh);
+	}
 
 	return () => {
-		chrome.bookmarks.onCreated.removeListener(refresh);
-		chrome.bookmarks.onRemoved.removeListener(refresh);
-		chrome.bookmarks.onChanged.removeListener(refresh);
-		chrome.bookmarks.onMoved.removeListener(onMoved);
+		clearTimeout(refreshTimer);
+		for (const event of events) {
+			event.removeListener(scheduleRefresh);
+		}
 	};
 }

@@ -31,6 +31,9 @@ jobs:
             - name: Run TypeScript compiler check
               run: npm run compile
 
+            - name: Run unit tests
+              run: npm test
+
             - name: Build Chrome Extension
               run: npm run build
 

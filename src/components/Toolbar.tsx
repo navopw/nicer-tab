@@ -6,9 +6,9 @@ import { SettingsModal } from "./modals/SettingsModal";
 import type { CardSize } from "../types/bookmark";
 
 const sizeIcons: Record<CardSize, React.ReactNode> = {
-	small: <Grid3X3 className="w-4 h-4" />,
-	medium: <Grid2X2 className="w-4 h-4" />,
-	large: <LayoutGrid className="w-4 h-4" />
+	small: <Grid3X3 className="w-4 h-4" aria-hidden="true" />,
+	medium: <Grid2X2 className="w-4 h-4" aria-hidden="true" />,
+	large: <LayoutGrid className="w-4 h-4" aria-hidden="true" />
 };
 
 export function Toolbar() {
@@ -25,10 +25,17 @@ export function Toolbar() {
 				<SearchBar />
 
 				{/* Card size selector */}
-				<div className="flex items-center gap-1 p-1 bg-secondary rounded-lg">
+				<div
+					role="group"
+					aria-label="Card size"
+					className="flex items-center gap-1 p-1 bg-secondary rounded-lg"
+				>
 					{sizes.map(size => (
 						<button
 							key={size}
+							type="button"
+							aria-pressed={cardSize === size}
+							aria-label={`${size.charAt(0).toUpperCase() + size.slice(1)} cards`}
 							onClick={() => setCardSize(size)}
 							className={`
 								p-2 rounded-md transition-colors cursor-pointer
@@ -49,11 +56,13 @@ export function Toolbar() {
 				<div className="ml-auto flex items-center gap-2">
 					{/* Settings button */}
 					<button
+						type="button"
 						onClick={() => setShowSettings(true)}
 						className="p-2 bg-secondary rounded-lg text-secondary hover:text-primary hover:bg-sidebar-hover transition-colors cursor-pointer"
 						title="Settings"
+						aria-label="Settings"
 					>
-						<Settings className="w-4 h-4" />
+						<Settings className="w-4 h-4" aria-hidden="true" />
 					</button>
 				</div>
 			</header>

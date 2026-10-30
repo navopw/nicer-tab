@@ -1,3 +1,5 @@
+import type { FaviconOverride } from "./favicon";
+
 export interface BookmarkNode {
 	id: string;
 	parentId?: string;
@@ -6,6 +8,10 @@ export interface BookmarkNode {
 	title: string;
 	dateAdded?: number;
 	dateGroupModified?: number;
+	/** Chrome only: "bookmarks-bar", "other", "mobile" or "managed" on the permanent root folders. */
+	folderType?: string;
+	/** Set to "managed" on folders an administrator controls; they cannot be changed. */
+	unmodifiable?: string;
 	children?: BookmarkNode[];
 }
 
@@ -17,6 +23,10 @@ export interface BookmarkExport {
 	version: number;
 	exportedAt: string;
 	bookmarks: BookmarkNode[];
+	/** Since version 2: the appearance and behaviour settings. */
+	settings?: Record<string, unknown>;
+	/** Since version 2: custom icons, keyed by the exported bookmark IDs. */
+	faviconOverrides?: Record<string, FaviconOverride>;
 }
 
 // Helper type guards
