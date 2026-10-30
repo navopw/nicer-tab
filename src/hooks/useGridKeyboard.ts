@@ -165,8 +165,9 @@ export function useGridKeyboard({ bookmarks, onOpen, onEdit, gridRef }: UseGridK
 
 				case "Enter": {
 					e.preventDefault();
-					if (focusedIndex >= 0 && focusedIndex < bookmarks.length) {
-						onOpen(bookmarks[focusedIndex]);
+					const focused = bookmarks[focusedIndex];
+					if (focused) {
+						onOpen(focused);
 					}
 					break;
 				}
@@ -174,8 +175,9 @@ export function useGridKeyboard({ bookmarks, onOpen, onEdit, gridRef }: UseGridK
 				case "e": {
 					if (e.ctrlKey || e.metaKey) {
 						e.preventDefault();
-						if (focusedIndex >= 0 && focusedIndex < bookmarks.length && onEdit) {
-							onEdit(bookmarks[focusedIndex]);
+						const focused = bookmarks[focusedIndex];
+						if (focused && onEdit) {
+							onEdit(focused);
 						}
 					}
 					break;
