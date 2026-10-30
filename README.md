@@ -10,8 +10,8 @@ Nicer Tab is a Chrome/Firefox new tab extension that turns your browser bookmark
 
 [![GPL-3.0 License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)
-![WXT](https://img.shields.io/badge/WXT-0.20-orange)
+![TypeScript](https://img.shields.io/badge/TypeScript-7.0-3178C6?logo=typescript&logoColor=white)
+![WXT](https://img.shields.io/badge/WXT-0.21-orange)
 
 ## Features
 
@@ -29,7 +29,7 @@ Nicer Tab is a Chrome/Firefox new tab extension that turns your browser bookmark
 
 ### Prerequisites
 
-- Node.js 18 or newer
+- Node.js 22.22.1 or newer
 - npm
 
 ### Commands
