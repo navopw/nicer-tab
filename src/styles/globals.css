@@ -88,6 +88,12 @@ textarea {
 	border: 1px solid var(--border-color);
 }
 
+input[type="text"]:focus,
+input[type="url"]:focus,
+textarea:focus {
+	border-color: var(--accent-color);
+}
+
 /* Utility classes using CSS variables */
 .bg-primary {
 	background-color: var(--bg-primary);
@@ -136,6 +142,39 @@ textarea {
 
 .hover\:bg-card-hover:hover {
 	background-color: var(--card-hover);
+}
+
+/* Letter avatars for bookmarks without an icon; --letter-hue is set per site */
+.letter-avatar {
+	background-color: hsl(var(--letter-hue, 220) 45% 92%);
+	color: hsl(var(--letter-hue, 220) 45% 32%);
+}
+
+.dark .letter-avatar {
+	background-color: hsl(var(--letter-hue, 220) 30% 16%);
+	color: hsl(var(--letter-hue, 220) 55% 72%);
+}
+
+/* Toasts */
+@keyframes toast-in {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.toast-enter {
+	animation: toast-in 150ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.toast-enter {
+		animation: none;
+	}
 }
 
 /* Sidebar resize handle styles */

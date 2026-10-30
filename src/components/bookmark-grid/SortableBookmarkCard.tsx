@@ -1,32 +1,17 @@
 import { useSortable } from "@dnd-kit/react/sortable";
 import type { BookmarkNode, CardSize } from "../../types/bookmark";
-import { BookmarkCard } from "./BookmarkCard";
+import { BookmarkCard, type BookmarkCardActions } from "./BookmarkCard";
 
 interface SortableBookmarkCardProps {
 	bookmark: BookmarkNode;
 	size: CardSize;
 	index: number;
-	onEdit?: (bookmark: BookmarkNode) => void;
-	onDelete?: (bookmark: BookmarkNode) => void;
-	onDuplicate?: (bookmark: BookmarkNode) => void;
-	onCustomizeIcon?: (bookmark: BookmarkNode) => void;
-	isFocused?: boolean;
-	onOpen?: () => void;
-	onFocus?: (index: number) => void;
+	actions: BookmarkCardActions;
+	gridKey: string;
+	tabIndex: number;
 }
 
-export function SortableBookmarkCard({
-	bookmark,
-	size,
-	index,
-	onEdit,
-	onDelete,
-	onDuplicate,
-	onCustomizeIcon,
-	isFocused,
-	onOpen,
-	onFocus
-}: SortableBookmarkCardProps) {
+export function SortableBookmarkCard({ bookmark, size, index, actions, gridKey, tabIndex }: SortableBookmarkCardProps) {
 	const sortable = useSortable({
 		id: bookmark.id,
 		index,
@@ -50,23 +35,12 @@ export function SortableBookmarkCard({
 	return (
 		<div
 			ref={setNodeRef}
-			data-bookmark-card
-			onPointerDown={() => onFocus?.(index)}
 			style={{
 				opacity: sortable.isDragging ? 0.4 : 1,
 				transition: sortable.isDragging ? "none" : "transform 150ms ease, opacity 150ms ease"
 			}}
 		>
-			<BookmarkCard
-				bookmark={bookmark}
-				size={size}
-				onEdit={onEdit}
-				onDelete={onDelete}
-				onDuplicate={onDuplicate}
-				onCustomizeIcon={onCustomizeIcon}
-				isFocused={isFocused}
-				onOpen={onOpen}
-			/>
+			<BookmarkCard bookmark={bookmark} size={size} actions={actions} gridKey={gridKey} tabIndex={tabIndex} />
 		</div>
 	);
 }

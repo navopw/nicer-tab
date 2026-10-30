@@ -15,14 +15,15 @@ Nicer Tab is a Chrome/Firefox new tab extension that turns your browser bookmark
 
 ## Features
 
-- **Visual bookmark grid** - Card-based bookmarks with favicons, fallback initials, and small/medium/large card sizes.
-- **Folder navigation** - Collapsible, keyboard-navigable folder tree with optional bookmark counts and a resizable sidebar.
-- **Bookmark management** - Create, edit, delete, duplicate, open, copy URLs, and create folders.
-- **Drag and drop** - Reorder bookmarks in the grid, and rearrange the sidebar tree: drop a folder between rows to reorder it, onto a row to nest it inside, or drag sideways to change its nesting depth. Collapsed folders spring open while you hover them.
-- **Search** - Real-time search across all bookmarks, grouped by folder path.
-- **Appearance controls** - System/light/dark theme support plus preset or custom accent colors.
-- **Custom favicon URLs** - Override a bookmark's icon with a direct image URL, cached in extension storage.
-- **Import/export** - Export bookmarks to JSON and merge imported bookmark backups.
+- **Visual bookmark grid** - Card-based bookmarks with favicons, coloured letter fallbacks, and small/medium/large card sizes that fill the available width.
+- **Folder navigation** - Collapsible folder tree with optional bookmark counts and a resizable sidebar, plus subfolders and a clickable breadcrumb in the grid. The last opened folder is remembered.
+- **Bookmark management** - Create, edit, move, delete, duplicate, open, copy URLs, and create folders. Deletes and moves can be undone, and duplicate addresses are pointed out as you type.
+- **Drag and drop** - Reorder bookmarks in the grid, drop them onto folders in the grid or sidebar, and rearrange the sidebar tree: drop a folder between rows to reorder it, onto a row to nest it inside, or drag sideways to change its nesting depth. Collapsed folders spring open while you hover them.
+- **Search** - Ranked search across bookmark titles, addresses and folder names. Enter opens the top result, the down arrow moves into the results.
+- **Keyboard and screen reader friendly** - Arrow keys move through the folder tree and the grid, `/` or `Cmd/Ctrl+K` focuses search, `Delete` removes, `F2` renames folders, and every control is labelled.
+- **Appearance controls** - System/light/dark theme support plus preset or custom accent colors, applied before the first paint.
+- **Custom icons** - Override a bookmark's icon with an image URL or an uploaded image.
+- **Import/export** - Back up bookmarks, settings and custom icons as JSON, or export and import the standard HTML bookmark file every browser uses. Imports merge into your existing bookmarks and skip what you already have.
 - **Browser sync friendly** - Uses the standard browser bookmarks API, so changes stay in your browser's bookmark store.
 
 ## Development
@@ -44,6 +45,9 @@ npm run dev:firefox  # Firefox
 
 # Type-check
 npm run compile
+
+# Unit tests
+npm test
 
 # Format
 npm run format
@@ -92,18 +96,25 @@ Firefox temporary add-ons are removed when Firefox restarts. Rebuild with `npm r
 
 - **WXT** - Browser extension framework
 - **React 19** - UI library
-- **TypeScript 5.9** - Static typing
+- **TypeScript 7** - Static typing
 - **Zustand** - State management with browser storage persistence
 - **Tailwind CSS 4** - Styling
 - **@dnd-kit** - Drag and drop
 - **lucide-react** - Icons
 - **react-colorful** - Accent color picker
+- **Vitest** - Unit tests
 
 ## Permissions
 
 - `bookmarks` - Read, create, update, move, and delete browser bookmarks.
 - `storage` - Persist settings and custom favicon data.
 - `favicon` - Read Chrome favicon data for bookmark icons. Chrome only; Firefox builds omit this permission.
+
+## Privacy
+
+Nicer Tab has no server and collects nothing. Your bookmarks stay in the browser.
+
+The one outside request it makes is for icons: when the browser has no icon for a bookmarked site (always the case in Firefox, which has no favicon API for extensions), the site's domain is sent to Google's favicon service. Turn off **Settings > General > Fetch missing icons from Google** to show a letter instead. Custom icon URLs you enter are loaded from wherever they point.
 
 ## Contributing
 
