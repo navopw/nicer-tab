@@ -30,11 +30,12 @@ export function useSidebarKeyboard() {
 
 	// Initialize focused folder if not set
 	useEffect(() => {
-		if (!focusedFolderId && visibleFolders.length > 0) {
+		const firstFolder = visibleFolders[0];
+		if (!focusedFolderId && firstFolder) {
 			const selectedIsVisible = selectedFolderId
 				? visibleFolders.some(folder => folder.id === selectedFolderId)
 				: false;
-			setFocusedFolderId(selectedIsVisible ? selectedFolderId : visibleFolders[0].id);
+			setFocusedFolderId(selectedIsVisible ? selectedFolderId : firstFolder.id);
 		}
 	}, [focusedFolderId, visibleFolders, selectedFolderId, setFocusedFolderId]);
 
@@ -77,8 +78,8 @@ export function useSidebarKeyboard() {
 			switch (e.key) {
 				case "ArrowDown": {
 					e.preventDefault();
-					if (effectiveIndex < visibleFolders.length - 1) {
-						const nextFolder = visibleFolders[effectiveIndex + 1];
+					const nextFolder = visibleFolders[effectiveIndex + 1];
+					if (nextFolder) {
 						setFocusedFolderId(nextFolder.id);
 						setSelectedFolderId(nextFolder.id);
 					}
@@ -87,8 +88,8 @@ export function useSidebarKeyboard() {
 
 				case "ArrowUp": {
 					e.preventDefault();
-					if (effectiveIndex > 0) {
-						const prevFolder = visibleFolders[effectiveIndex - 1];
+					const prevFolder = visibleFolders[effectiveIndex - 1];
+					if (prevFolder) {
 						setFocusedFolderId(prevFolder.id);
 						setSelectedFolderId(prevFolder.id);
 					}
