@@ -3,19 +3,28 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { chromeStorage } from "../lib/chrome-storage";
 import type { CardSize, ThemeMode } from "../types/bookmark";
 
-interface UIState {
+/** Everything the user can configure; this is what is persisted and exported. */
+export interface UISettings {
 	theme: ThemeMode;
 	cardSize: CardSize;
-	sidebarCollapsed: boolean;
 	sidebarWidth: number;
 	showFolderBookmarkCount: boolean;
 	accentColor: string;
+	/** Open bookmarks in a new tab instead of replacing the new tab page. */
+	openInNewTab: boolean;
+	/** Ask Google's favicon service for icons the browser has not cached. */
+	useGoogleFavicons: boolean;
+}
+
+interface UIState extends UISettings {
 	setTheme: (theme: ThemeMode) => void;
 	setCardSize: (size: CardSize) => void;
-	setSidebarCollapsed: (collapsed: boolean) => void;
 	setSidebarWidth: (width: number) => void;
 	setShowFolderBookmarkCount: (show: boolean) => void;
 	setAccentColor: (color: string) => void;
+	setOpenInNewTab: (openInNewTab: boolean) => void;
+	setUseGoogleFavicons: (useGoogleFavicons: boolean) => void;
+	applySettings: (settings: Partial<UISettings>) => void;
 }
 
 export const SIDEBAR_MIN_WIDTH = 200;
@@ -23,6 +32,7 @@ export const SIDEBAR_MAX_WIDTH = 400;
 export const SIDEBAR_DEFAULT_WIDTH = 256;
 const STARTUP_THEME_KEY = "nicer-tab-startup-theme";
 const STARTUP_ACCENT_KEY = "nicer-tab-startup-accent";
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
 function getStartupTheme(): ThemeMode {
 	if (typeof window === "undefined") return "system";
@@ -41,7 +51,7 @@ function getStartupAccent(): string {
 	if (typeof window === "undefined") return "#3B82F6";
 	try {
 		const cached = window.localStorage.getItem(STARTUP_ACCENT_KEY);
-		if (cached && /^#[0-9a-fA-F]{6}$/.test(cached)) {
+		if (cached && HEX_COLOR.test(cached)) {
 			return cached.toUpperCase();
 		}
 	} catch {
@@ -68,32 +78,88 @@ function cacheStartupAccent(color: string) {
 	}
 }
 
+/** "#f80" becomes "#FF8800", so every stored colour has the same shape. */
+function normalizeHexColor(color: string): string {
+	const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(color);
+	return (short ? `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}` : color).toUpperCase();
+}
+
+function clampSidebarWidth(width: number): number {
+	return Math.min(Math.max(width, SIDEBAR_MIN_WIDTH), SIDEBAR_MAX_WIDTH);
+}
+
+/** Keep only well-formed settings from an untrusted object, such as an imported backup. */
+export function sanitizeUISettings(input: unknown): Partial<UISettings> {
+	if (!input || typeof input !== "object") return {};
+	const raw = input as Record<string, unknown>;
+	const settings: Partial<UISettings> = {};
+
+	if (raw.theme === "system" || raw.theme === "light" || raw.theme === "dark") settings.theme = raw.theme;
+	if (raw.cardSize === "small" || raw.cardSize === "medium" || raw.cardSize === "large") {
+		settings.cardSize = raw.cardSize;
+	}
+	if (typeof raw.sidebarWidth === "number" && Number.isFinite(raw.sidebarWidth)) {
+		settings.sidebarWidth = clampSidebarWidth(raw.sidebarWidth);
+	}
+	if (typeof raw.accentColor === "string") {
+		const accentColor = normalizeHexColor(raw.accentColor);
+		if (HEX_COLOR.test(accentColor)) settings.accentColor = accentColor;
+	}
+	for (const key of ["showFolderBookmarkCount", "openInNewTab", "useGoogleFavicons"] as const) {
+		if (typeof raw[key] === "boolean") settings[key] = raw[key];
+	}
+
+	return settings;
+}
+
+export function getUISettings(state: UISettings = useUIStore.getState()): UISettings {
+	return {
+		theme: state.theme,
+		cardSize: state.cardSize,
+		sidebarWidth: state.sidebarWidth,
+		showFolderBookmarkCount: state.showFolderBookmarkCount,
+		accentColor: state.accentColor,
+		openInNewTab: state.openInNewTab,
+		useGoogleFavicons: state.useGoogleFavicons
+	};
+}
+
 export const useUIStore = create<UIState>()(
 	persist(
 		set => ({
 			theme: getStartupTheme(),
 			cardSize: "medium",
-			sidebarCollapsed: false,
 			sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
 			showFolderBookmarkCount: true,
 			accentColor: getStartupAccent(),
+			openInNewTab: false,
+			useGoogleFavicons: true,
 			setTheme: theme => {
 				cacheStartupTheme(theme);
 				set({ theme });
 			},
 			setCardSize: size => set({ cardSize: size }),
-			setSidebarCollapsed: collapsed => set({ sidebarCollapsed: collapsed }),
-			setSidebarWidth: width =>
-				set({ sidebarWidth: Math.min(Math.max(width, SIDEBAR_MIN_WIDTH), SIDEBAR_MAX_WIDTH) }),
+			setSidebarWidth: width => set({ sidebarWidth: clampSidebarWidth(width) }),
 			setShowFolderBookmarkCount: show => set({ showFolderBookmarkCount: show }),
 			setAccentColor: color => {
-				cacheStartupAccent(color);
-				set({ accentColor: color });
+				const accentColor = normalizeHexColor(color);
+				cacheStartupAccent(accentColor);
+				set({ accentColor });
+			},
+			setOpenInNewTab: openInNewTab => set({ openInNewTab }),
+			setUseGoogleFavicons: useGoogleFavicons => set({ useGoogleFavicons }),
+			applySettings: settings => {
+				if (settings.theme) cacheStartupTheme(settings.theme);
+				if (settings.accentColor) cacheStartupAccent(settings.accentColor);
+				set(settings);
 			}
 		}),
 		{
 			name: "nicer-tab-ui",
 			storage: createJSONStorage(() => chromeStorage),
+			partialize: state => getUISettings(state),
+			// Ignore keys that older versions persisted, e.g. `sidebarCollapsed`.
+			merge: (persisted, current) => ({ ...current, ...sanitizeUISettings(persisted) }),
 			onRehydrateStorage: () => state => {
 				if (!state) return;
 				cacheStartupTheme(state.theme);

@@ -1,38 +1,41 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect } from "react";
 import { DragDropProvider } from "@dnd-kit/react";
-import { PointerSensor, PointerActivationConstraints } from "@dnd-kit/dom";
+import { isSortable } from "@dnd-kit/react/sortable";
+import { Accessibility, PointerSensor, PointerActivationConstraints } from "@dnd-kit/dom";
 import { useUIStore, applyTheme, setupThemeListener, applyAccentColor } from "../../stores/uiStore";
 import { useBookmarkStore, setupBookmarkListeners } from "../../stores/bookmarkStore";
-import { useKeyboardStore } from "../../stores/keyboardStore";
+import { setupFaviconSync } from "../../stores/faviconStore";
+import { isBookmark, type BookmarkNode } from "../../types/bookmark";
+import { waitForHydration } from "../../lib/hydration";
+import { moveWithUndo } from "../../lib/bookmark-actions";
+import { useGlobalShortcuts } from "../../hooks/useGlobalShortcuts";
 import { Sidebar } from "../../components/sidebar/Sidebar";
 import { BookmarkGrid } from "../../components/bookmark-grid/BookmarkGrid";
 import { Toolbar } from "../../components/Toolbar";
-import { ConfirmDialog } from "../../components/common/ConfirmDialog";
+import { Toaster } from "../../components/common/Toaster";
+
+// Configure pointer sensor with distance constraint to allow clicks
+const sensors = [
+	PointerSensor.configure({
+		activationConstraints: [new PointerActivationConstraints.Distance({ value: 8 })]
+	})
+];
+
+// Dragging is mouse only, so dnd-kit's screen reader instructions for keyboard
+// dragging would be wrong. Dropping its accessibility plugin also stops it from
+// adding tab stops to every card; the grid and sidebar manage focus themselves.
+const withoutAccessibilityPlugin = <T,>(plugins: T[]) => plugins.filter(plugin => plugin !== Accessibility);
 
 export default function App() {
 	const theme = useUIStore(state => state.theme);
 	const accentColor = useUIStore(state => state.accentColor);
 	const fetchBookmarks = useBookmarkStore(state => state.fetchBookmarks);
-	const isLoading = useBookmarkStore(state => state.isLoading);
+	const hasLoaded = useBookmarkStore(state => state.hasLoaded);
 	const error = useBookmarkStore(state => state.error);
-	const selectedFolderId = useBookmarkStore(state => state.selectedFolderId);
 	const moveBookmark = useBookmarkStore(state => state.moveBookmark);
-	const getFolderPath = useBookmarkStore(state => state.getFolderPath);
+	const getBookmarksInFolder = useBookmarkStore(state => state.getBookmarksInFolder);
 
-	const [pendingBookmarkMove, setPendingBookmarkMove] = useState<{
-		bookmarkId: string;
-		bookmarkTitle: string;
-		sourceParentId: string | null;
-		targetId: string;
-	} | null>(null);
-	const [isConfirmingBookmarkMove, setIsConfirmingBookmarkMove] = useState(false);
-
-	const bookmarkMoveNames = useMemo(() => {
-		if (!pendingBookmarkMove) return null;
-		const targetPath = getFolderPath(pendingBookmarkMove.targetId);
-		const targetName = targetPath[targetPath.length - 1]?.title || "Untitled";
-		return { targetName };
-	}, [pendingBookmarkMove, getFolderPath]);
+	useGlobalShortcuts();
 
 	// Apply theme on mount and when it changes
 	useEffect(() => {
@@ -49,69 +52,50 @@ export default function App() {
 		return setupThemeListener(() => useUIStore.getState().theme);
 	}, []);
 
-	// Fetch bookmarks on mount
+	// Load bookmarks once the saved settings and last opened folder are restored,
+	// so the first paint already has the right layout and folder.
 	useEffect(() => {
-		fetchBookmarks();
-		return setupBookmarkListeners();
-	}, [fetchBookmarks]);
+		const stopBookmarkListeners = setupBookmarkListeners();
+		const stopFaviconSync = setupFaviconSync();
+		void Promise.all([waitForHydration(useUIStore), waitForHydration(useBookmarkStore)]).then(() =>
+			useBookmarkStore.getState().fetchBookmarks()
+		);
+		return () => {
+			stopBookmarkListeners();
+			stopFaviconSync();
+		};
+	}, []);
 
-	// Folder drags are owned by the sidebar (see useFolderDnd) - this only covers the grid.
+	// Folder drags are owned by the sidebar (see useFolderDnd) - this only covers bookmarks.
 	const handleDragEnd = async (event: any) => {
 		const { operation, canceled } = event;
-		if (canceled) return;
 		const source = operation?.source;
-		const target = operation?.target;
-		if (!source || !target) return;
+		if (canceled || !source) return;
 
-		const sourceData = source.data as { type?: string; bookmark?: unknown } | undefined;
-		const targetData = target.data as { type?: string; folderId?: string; bookmark?: unknown } | undefined;
-		if (!sourceData || !targetData) return;
+		const sourceData = source.data as { type?: string; bookmark?: BookmarkNode } | undefined;
+		const bookmark = sourceData?.type === "bookmark" ? sourceData.bookmark : undefined;
+		if (!bookmark?.id || !bookmark.parentId) return;
 
-		if (sourceData.type === "bookmark") {
-			const bookmark = sourceData.bookmark as
-				{ id?: string; title?: string; parentId?: string; index?: number } | undefined;
-			if (!bookmark?.id) return;
-			if (targetData.type === "folder-drop") {
-				const targetFolderId = String(targetData.folderId ?? "");
-				if (!targetFolderId || targetFolderId === bookmark.parentId) return;
-				setPendingBookmarkMove({
-					bookmarkId: bookmark.id,
-					bookmarkTitle: bookmark.title || "Untitled",
-					sourceParentId: bookmark.parentId ?? null,
-					targetId: targetFolderId
-				});
-				return;
-			}
-
-			if (targetData.type !== "bookmark") return;
-			const sourceParentId = bookmark.parentId ?? selectedFolderId;
-			const targetBookmark = targetData.bookmark as { parentId?: string; index?: number } | undefined;
-			const targetParentId = targetBookmark?.parentId ?? sourceParentId;
-			if (!sourceParentId || sourceParentId !== targetParentId) return;
-
-			// Use Chrome indices from the bookmark data, not visual indices
-			const sourceChromeIndex = bookmark.index;
-			const targetChromeIndex = targetBookmark?.index;
-			if (sourceChromeIndex === undefined || targetChromeIndex === undefined) return;
-			if (sourceChromeIndex === targetChromeIndex) return;
-
-			// Chrome inserts BEFORE removing, so when moving forward we need +1
-			// When moving backward, use the target index directly
-			const finalIndex = sourceChromeIndex < targetChromeIndex ? targetChromeIndex + 1 : targetChromeIndex;
-
-			await moveBookmark(bookmark.id, { parentId: sourceParentId, index: finalIndex });
+		const targetData = operation.target?.data as { type?: string; folderId?: string } | undefined;
+		const targetFolderId = targetData?.type === "folder-drop" ? String(targetData.folderId ?? "") : "";
+		if (targetFolderId && targetFolderId !== bookmark.parentId) {
+			await moveWithUndo(bookmark.id, targetFolderId);
+			return;
 		}
-	};
 
-	const handleConfirmBookmarkMove = async () => {
-		if (!pendingBookmarkMove) return;
-		setIsConfirmingBookmarkMove(true);
-		try {
-			await moveBookmark(pendingBookmarkMove.bookmarkId, { parentId: pendingBookmarkMove.targetId });
-			setPendingBookmarkMove(null);
-		} finally {
-			setIsConfirmingBookmarkMove(false);
-		}
+		// Reordering within the folder. dnd-kit already moved the card on screen while
+		// dragging, so the drop target is usually the card itself; the sortable's
+		// indexes tell where it ended up among the folder's bookmarks.
+		if (!isSortable(source) || source.initialIndex === source.index) return;
+		const bookmarks = getBookmarksInFolder(bookmark.parentId).filter(isBookmark);
+		const moving = bookmarks[source.initialIndex];
+		const target = bookmarks[source.index];
+		if (moving?.id !== bookmark.id || target?.index === undefined) return;
+
+		// Chrome indexes count folders too, and Chrome inserts before removing, so a
+		// forward move needs one slot more than the target's index.
+		const index = source.initialIndex < source.index ? target.index + 1 : target.index;
+		await moveBookmark(bookmark.id, { parentId: bookmark.parentId, index });
 	};
 
 	if (error) {
@@ -121,6 +105,7 @@ export default function App() {
 					<p className="text-lg text-red-500 mb-2">Error loading bookmarks</p>
 					<p className="text-secondary">{error}</p>
 					<button
+						type="button"
 						onClick={() => fetchBookmarks()}
 						className="mt-4 px-4 py-2 bg-[var(--accent-color)] text-white rounded-lg hover:bg-[var(--accent-hover)] transition-colors cursor-pointer"
 					>
@@ -131,15 +116,14 @@ export default function App() {
 		);
 	}
 
-	// Configure pointer sensor with distance constraint to allow clicks
-	const sensors = [
-		PointerSensor.configure({
-			activationConstraints: [new PointerActivationConstraints.Distance({ value: 8 })]
-		})
-	];
+	// Loading the tree takes a few milliseconds; rendering nothing until then avoids
+	// flashing a placeholder and then the real layout on every new tab.
+	if (!hasLoaded) {
+		return null;
+	}
 
 	return (
-		<DragDropProvider sensors={sensors} onDragEnd={handleDragEnd}>
+		<DragDropProvider sensors={sensors} plugins={withoutAccessibilityPlugin} onDragEnd={handleDragEnd}>
 			<div className="flex h-screen bg-primary">
 				{/* Sidebar */}
 				<Sidebar />
@@ -150,35 +134,13 @@ export default function App() {
 					<Toolbar />
 
 					{/* Bookmark grid */}
-					<div
-						className="flex-1 overflow-auto p-6"
-						onClick={e => {
-							// Clear focus when clicking on empty area (not on a bookmark card)
-							if (e.target === e.currentTarget) {
-								useKeyboardStore.getState().clearFocus();
-							}
-						}}
-					>
-						{isLoading ? (
-							<div className="flex items-center justify-center h-full">
-								<div className="animate-pulse text-secondary">Loading bookmarks...</div>
-							</div>
-						) : (
-							<BookmarkGrid />
-						)}
+					<div className="flex-1 overflow-auto p-6">
+						<BookmarkGrid />
 					</div>
 				</main>
 			</div>
 
-			<ConfirmDialog
-				isOpen={!!pendingBookmarkMove}
-				onClose={() => setPendingBookmarkMove(null)}
-				onConfirm={handleConfirmBookmarkMove}
-				title="Move bookmark"
-				message={`Move "${pendingBookmarkMove?.bookmarkTitle ?? "Untitled"}" into "${bookmarkMoveNames?.targetName ?? "Untitled"}"?`}
-				confirmLabel="Move"
-				isLoading={isConfirmingBookmarkMove}
-			/>
+			<Toaster />
 		</DragDropProvider>
 	);
 }

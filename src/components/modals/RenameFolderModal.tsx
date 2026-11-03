@@ -47,7 +47,7 @@ export function RenameFolderModal({ isOpen, onClose, currentName, onRename }: Re
 						className="w-full px-3 py-2 bg-secondary rounded-lg text-primary focus:outline-none"
 						placeholder="Folder name"
 						required
-						autoFocus
+						data-autofocus
 					/>
 				</div>
 

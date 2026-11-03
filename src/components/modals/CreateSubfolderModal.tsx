@@ -51,7 +51,7 @@ export function CreateSubfolderModal({ isOpen, onClose, parentFolderName, onCrea
 						className="w-full px-3 py-2 bg-secondary rounded-lg text-primary focus:outline-none"
 						placeholder="New Folder"
 						required
-						autoFocus
+						data-autofocus
 					/>
 				</div>
 

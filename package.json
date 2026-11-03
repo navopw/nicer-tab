@@ -21,6 +21,7 @@
 		"zip": "wxt zip",
 		"zip:firefox": "wxt zip -b firefox",
 		"compile": "tsc --noEmit",
+		"test": "vitest run",
 		"postinstall": "wxt prepare",
 		"format": "prettier --write .",
 		"prepare": "husky"
@@ -49,6 +50,7 @@
 		"prettier": "^3.9.10",
 		"tailwindcss": "^4.3.3",
 		"typescript": "^7.0.2",
+		"vitest": "^5.0.5",
 		"wxt": "^0.21.5"
 	},
 	"engines": {
