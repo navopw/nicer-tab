@@ -11,6 +11,7 @@ import {
 	optimisticallyMoveNode
 } from "../lib/bookmark-tree";
 import { showErrorToast } from "./toastStore";
+import { useSearchStore } from "./searchStore";
 
 interface BookmarkState {
 	bookmarkTree: BookmarkNode[];
@@ -21,8 +22,9 @@ interface BookmarkState {
 	/** Only set when the initial load fails; later failures surface as toasts. */
 	error: string | null;
 
+	/** Open a folder. Ends any search, since the grid shows search results while there is a query. */
 	setSelectedFolderId: (id: string | null) => void;
-	/** Select a folder and expand its ancestors so it is visible in the sidebar. */
+	/** Open a folder and expand its ancestors so it is visible in the sidebar. Ends any search too. */
 	navigateToFolder: (id: string) => void;
 	toggleFolderExpanded: (id: string) => void;
 	setFolderExpanded: (id: string, expanded: boolean) => void;
@@ -84,9 +86,13 @@ export const useBookmarkStore = create<BookmarkState>()(
 			hasLoaded: false,
 			error: null,
 
-			setSelectedFolderId: id => set({ selectedFolderId: id }),
+			setSelectedFolderId: id => {
+				useSearchStore.getState().clearSearch();
+				set({ selectedFolderId: id });
+			},
 
-			navigateToFolder: id =>
+			navigateToFolder: id => {
+				useSearchStore.getState().clearSearch();
 				set(state => {
 					const ancestors = getPathToNode(state.bookmarkTree, id)?.slice(0, -1) ?? [];
 					const collapsedFolders = new Set(state.collapsedFolders);
@@ -94,7 +100,8 @@ export const useBookmarkStore = create<BookmarkState>()(
 						collapsedFolders.delete(ancestor.id);
 					}
 					return { selectedFolderId: id, collapsedFolders };
-				}),
+				});
+			},
 
 			toggleFolderExpanded: id =>
 				set(state => {
@@ -168,7 +175,10 @@ export const useBookmarkStore = create<BookmarkState>()(
 					} else {
 						await chrome.bookmarks.remove(id);
 					}
-					await removeFaviconOverrides(bookmarkIdsToClear);
+					// The bookmark is gone at this point, so a failed cleanup must not report the delete as failed.
+					await removeFaviconOverrides(bookmarkIdsToClear).catch(error =>
+						console.error("Could not remove custom icons:", error)
+					);
 					return true;
 				} catch (error) {
 					showErrorToast("Could not delete", error);

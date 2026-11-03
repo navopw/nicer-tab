@@ -40,7 +40,6 @@ export function SearchBar() {
 					void openUrl(topBookmark.url, openTargetFromEvent(e, openInNewTab));
 				} else if (topFolder) {
 					e.preventDefault();
-					clearSearch();
 					navigateToFolder(topFolder.id);
 				}
 				break;

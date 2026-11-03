@@ -29,7 +29,6 @@ export function BookmarkGrid() {
 	const navigateToFolder = useBookmarkStore(state => state.navigateToFolder);
 	const cardSize = useUIStore(state => state.cardSize);
 	const query = useSearchStore(state => state.query);
-	const clearSearch = useSearchStore(state => state.clearSearch);
 	const { isSearching, results } = useSearchResults();
 
 	const gridRef = useRef<HTMLDivElement>(null);
@@ -66,11 +65,10 @@ export function BookmarkGrid() {
 		(folderId: string) => {
 			// Opened from a card or the breadcrumb: keep focus in the grid once it shows the new folder.
 			const hadFocus = gridRef.current?.contains(document.activeElement) ?? false;
-			clearSearch();
 			navigateToFolder(folderId);
 			if (hadFocus) requestAnimationFrame(() => focusGrid());
 		},
-		[clearSearch, navigateToFolder]
+		[navigateToFolder]
 	);
 
 	const handleKeyDown = useGridNavigation({
