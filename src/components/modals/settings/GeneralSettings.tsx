@@ -70,7 +70,7 @@ export function GeneralSettings() {
 				<h3 className="text-sm font-medium text-secondary mb-3">Sidebar</h3>
 				<Switch
 					label="Show bookmark count"
-					description="Display bookmark count badge in folders"
+					description="Display how many bookmarks each folder holds"
 					checked={showFolderBookmarkCount}
 					onChange={setShowFolderBookmarkCount}
 				/>

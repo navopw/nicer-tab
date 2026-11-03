@@ -1,5 +1,6 @@
 import { ChevronRight } from "lucide-react";
 import { isBookmark, type BookmarkNode } from "../../types/bookmark";
+import { useUIStore } from "../../stores/uiStore";
 
 interface FolderHeaderProps {
 	/** Folders from the permanent root down to the open folder. */
@@ -9,6 +10,7 @@ interface FolderHeaderProps {
 
 /** Breadcrumb of the open folder; every ancestor is a link back up. */
 export function FolderHeader({ path, onNavigate }: FolderHeaderProps) {
+	const showFolderBookmarkCount = useUIStore(state => state.showFolderBookmarkCount);
 	const current = path[path.length - 1];
 	if (!current) return null;
 
@@ -46,9 +48,11 @@ export function FolderHeader({ path, onNavigate }: FolderHeaderProps) {
 					})}
 				</ol>
 			</nav>
-			<span className="text-xs text-tertiary whitespace-nowrap">
-				{bookmarkCount} bookmark{bookmarkCount === 1 ? "" : "s"}
-			</span>
+			{showFolderBookmarkCount && (
+				<span className="text-xs text-tertiary whitespace-nowrap">
+					{bookmarkCount} bookmark{bookmarkCount === 1 ? "" : "s"}
+				</span>
+			)}
 		</div>
 	);
 }

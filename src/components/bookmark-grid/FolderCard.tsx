@@ -4,6 +4,7 @@ import { useDroppable } from "@dnd-kit/react";
 import { Folder, FolderOpen } from "lucide-react";
 import { isFolder, type BookmarkNode, type CardSize } from "../../types/bookmark";
 import { useFolderActions } from "../../hooks/useFolderActions";
+import { useUIStore } from "../../stores/uiStore";
 import { ContextMenu, contextMenuPosition } from "../common/ContextMenu";
 import { CARD_LAYOUT } from "./cardLayout";
 
@@ -30,10 +31,12 @@ function describeContents(folder: BookmarkNode): string {
 /** A subfolder in the grid: opens on click, and bookmarks can be dropped onto it. */
 export function FolderCard({ folder, size, onOpen, gridKey, tabIndex, location }: FolderCardProps) {
 	const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+	const showFolderBookmarkCount = useUIStore(state => state.showFolderBookmarkCount);
 	const { menuItems, dialogs, handleKey } = useFolderActions(folder);
 	const layout = CARD_LAYOUT[size];
 	const title = folder.title || "Untitled";
-	const contents = describeContents(folder);
+	// Search results say where the folder is; otherwise show what it holds, if counts are on.
+	const subtitle = location ?? (showFolderBookmarkCount ? describeContents(folder) : undefined);
 
 	const droppable = useDroppable({
 		id: `folder-card:${folder.id}`,
@@ -100,8 +103,8 @@ export function FolderCard({ folder, size, onOpen, gridKey, tabIndex, location }
 				</div>
 				<span className="w-full text-center">
 					<span className={`${layout.titleClass} block text-primary font-medium line-clamp-2`}>{title}</span>
-					{size !== "small" && (
-						<span className="block text-xs text-tertiary truncate">{location ?? contents}</span>
+					{size !== "small" && subtitle && (
+						<span className="block text-xs text-tertiary truncate">{subtitle}</span>
 					)}
 				</span>
 			</button>
